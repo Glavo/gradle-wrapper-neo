@@ -56,6 +56,7 @@ public final class Bootstrap {
     private static final String BOOTSTRAP_PROPERTY = "gradle.wrapper.neo.bootstrap";
     private static final String SOURCE_PROPERTY = "gradle.wrapper.neo.source";
     private static final String JAR_PROPERTY = "gradle.wrapper.neo.jar";
+    public static final String WRAPPER_DIR_PROPERTY = "org.gradle.wrapper.neo.wrapper-dir";
     private static final String MANIFEST_SOURCE_SHA256 = "Gradle-Wrapper-Neo-Source-SHA256";
 
     private Bootstrap() {
@@ -66,7 +67,7 @@ public final class Bootstrap {
             Path sourceFile = Paths.get(requireProperty(SOURCE_PROPERTY));
             Path targetJar = Paths.get(requireProperty(JAR_PROPERTY));
             Path stagingClassesDir = codeSource(mainClass);
-            Path wrapperDir = targetJar.getParent();
+            Path wrapperDir = wrapperDir();
             int exitCode;
             try {
                 withLock(wrapperDir, () -> {
@@ -78,7 +79,7 @@ public final class Bootstrap {
                     }
                     return null;
                 });
-                exitCode = launchJar(targetJar, args);
+                exitCode = launchJar(targetJar, wrapperDir, args);
             } finally {
                 deleteRecursively(stagingClassesDir);
                 deleteIfEmpty(stagingClassesDir.getParent());
@@ -92,7 +93,7 @@ public final class Bootstrap {
             return false;
         }
 
-        Path wrapperDir = currentJar.getParent();
+        Path wrapperDir = wrapperDir();
         Path sourceFile = wrapperDir.resolve(SOURCE_FILE_NAME);
         if (!Files.isRegularFile(sourceFile) || isCurrent(currentJar, sourceFile)) {
             return false;
@@ -118,7 +119,7 @@ public final class Bootstrap {
             }
             int exitCode;
             try {
-                exitCode = launchJar(launchJar, args);
+                exitCode = launchJar(launchJar, wrapperDir, args);
             } finally {
                 Files.deleteIfExists(nextJar);
             }
@@ -149,6 +150,10 @@ public final class Bootstrap {
             throw new RuntimeException("Missing required system property: " + name);
         }
         return value;
+    }
+
+    static Path wrapperDir() {
+        return Paths.get(requireProperty(WRAPPER_DIR_PROPERTY));
     }
 
     private static Path classesDir(Path wrapperDir) {
@@ -284,20 +289,32 @@ public final class Bootstrap {
         }
     }
 
-    private static int launchJar(Path jarFile, String[] args) throws Exception {
+    private static int launchJar(Path jarFile, Path wrapperDir, String[] args) throws Exception {
         List<String> command = new ArrayList<>();
         command.add(javaExecutable());
-        for (String inputArgument : ManagementFactory.getRuntimeMXBean().getInputArguments()) {
-            if (!inputArgument.startsWith("-Dgradle.wrapper.neo.")) {
-                command.add(inputArgument);
-            }
-        }
+        command.addAll(forwardedJvmArguments(ManagementFactory.getRuntimeMXBean().getInputArguments(), wrapperDir));
         command.add("-jar");
         command.add(jarFile.toString());
         for (String arg : args) {
             command.add(arg);
         }
         return run(command);
+    }
+
+    static List<String> forwardedJvmArguments(List<String> inputArguments, Path wrapperDir) {
+        List<String> result = new ArrayList<>();
+        for (String inputArgument : inputArguments) {
+            if (!inputArgument.startsWith("-Dgradle.wrapper.neo.") && !isSystemPropertyArgument(inputArgument, WRAPPER_DIR_PROPERTY)) {
+                result.add(inputArgument);
+            }
+        }
+        result.add("-D" + WRAPPER_DIR_PROPERTY + "=" + wrapperDir);
+        return result;
+    }
+
+    private static boolean isSystemPropertyArgument(String inputArgument, String property) {
+        String option = "-D" + property;
+        return inputArgument.equals(option) || inputArgument.startsWith(option + "=");
     }
 
     private static String javaExecutable() {

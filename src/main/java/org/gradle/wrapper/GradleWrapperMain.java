@@ -110,20 +110,20 @@ public class GradleWrapperMain {
         return result;
     }
 
-    private static File rootDir(File wrapperJar) {
+    static File rootDir(File wrapperJar) {
         return wrapperDir(wrapperJar).getParentFile().getParentFile();
     }
 
-    private static File wrapperProperties(File wrapperJar) {
+    static File wrapperProperties(File wrapperJar) {
         return new File(wrapperDir(wrapperJar), "gradle-wrapper.properties");
     }
 
-    private static File wrapperDir(File wrapperJar) {
-        File parent = wrapperJar.getParentFile();
-        if (parent.getName().equals(".gradle-wrapper-neo")) {
-            return parent.getParentFile();
+    static File wrapperDir(File wrapperJar) {
+        String configuredWrapperDir = System.getProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
+        if (configuredWrapperDir != null && !configuredWrapperDir.isEmpty()) {
+            return new File(configuredWrapperDir);
         }
-        return parent;
+        return wrapperJar.getParentFile();
     }
 
     private static File wrapperJar() {
