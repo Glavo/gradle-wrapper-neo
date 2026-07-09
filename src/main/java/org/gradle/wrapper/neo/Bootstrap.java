@@ -56,7 +56,6 @@ public final class Bootstrap {
     private static final String BOOTSTRAP_PROPERTY = "gradle.wrapper.neo.bootstrap";
     private static final String SOURCE_PROPERTY = "gradle.wrapper.neo.source";
     private static final String JAR_PROPERTY = "gradle.wrapper.neo.jar";
-    private static final String CLASSES_DIR_PROPERTY = "gradle.wrapper.neo.classesDir";
     private static final String MANIFEST_SOURCE_SHA256 = "Gradle-Wrapper-Neo-Source-SHA256";
 
     private Bootstrap() {
@@ -66,12 +65,13 @@ public final class Bootstrap {
         if (Boolean.getBoolean(BOOTSTRAP_PROPERTY)) {
             Path sourceFile = Paths.get(requireProperty(SOURCE_PROPERTY));
             Path targetJar = Paths.get(requireProperty(JAR_PROPERTY));
-            Path stagingClassesDir = Paths.get(requireProperty(CLASSES_DIR_PROPERTY));
+            Path stagingClassesDir = codeSource(mainClass);
+            Path wrapperDir = targetJar.getParent();
             int exitCode;
             try {
-                withLock(targetJar.getParent(), () -> {
+                withLock(wrapperDir, () -> {
                     if (!isCurrent(targetJar, sourceFile)) {
-                        Path classesDir = classesDir(targetJar.getParent());
+                        Path classesDir = classesDir(wrapperDir);
                         recreateDirectory(classesDir);
                         copyDirectory(stagingClassesDir, classesDir);
                         writeJar(sourceFile, classesDir, targetJar);
@@ -80,7 +80,8 @@ public final class Bootstrap {
                 });
                 exitCode = launchJar(targetJar, args);
             } finally {
-                deleteRecursively(stagingClassesDir.getParent());
+                deleteRecursively(stagingClassesDir);
+                deleteIfEmpty(stagingClassesDir.getParent());
             }
             System.exit(exitCode);
             return true;
@@ -125,14 +126,6 @@ public final class Bootstrap {
             return true;
         }
 
-    private static String requireProperty(String name) {
-        String value = System.getProperty(name);
-        if (value == null || value.isEmpty()) {
-            throw new RuntimeException("Missing required system property: " + name);
-        }
-        return value;
-    }
-
     private static Path codeSource(Class<?> mainClass) {
         URI location;
         try {
@@ -148,6 +141,14 @@ public final class Bootstrap {
         } catch (NoClassDefFoundError e) {
             return new File(location.getPath()).toPath();
         }
+    }
+
+    private static String requireProperty(String name) {
+        String value = System.getProperty(name);
+        if (value == null || value.isEmpty()) {
+            throw new RuntimeException("Missing required system property: " + name);
+        }
+        return value;
     }
 
     private static Path classesDir(Path wrapperDir) {
@@ -347,6 +348,17 @@ public final class Bootstrap {
                 return FileVisitResult.CONTINUE;
             }
         });
+    }
+
+    private static void deleteIfEmpty(Path directory) throws IOException {
+        if (directory == null || !Files.isDirectory(directory)) {
+            return;
+        }
+        try {
+            Files.delete(directory);
+        } catch (IOException ignored) {
+            // Directory is not empty or cannot be removed; leaving it behind is harmless.
+        }
     }
 
     private static boolean isWindows() {

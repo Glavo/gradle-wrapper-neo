@@ -249,7 +249,6 @@ Please run this wrapper with a JDK, or provide $NEO_JAR."
                 "-Dgradle.wrapper.neo.bootstrap=true" \
                 "-Dgradle.wrapper.neo.source=$NEO_SOURCE" \
                 "-Dgradle.wrapper.neo.jar=$NEO_JAR" \
-                "-Dgradle.wrapper.neo.classesDir=$NEO_CLASSES_DIR" \
                 -cp "$NEO_CLASSES_DIR" \
                 GradleWrapperNeo \
                 "$@"
