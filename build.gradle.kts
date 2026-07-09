@@ -23,19 +23,20 @@ tasks.test {
     useJUnitPlatform()
 }
 
-val generateGradlewWrapperNeo = tasks.register<GenerateSingleJavaWrapperTask>("generateGradlewWrapperNeo") {
+val generateGradleWrapperNeo = tasks.register<GenerateSingleJavaWrapperTask>("generateGradleWrapperNeo") {
     sourceDirectory.set(layout.projectDirectory.dir("src/main/java"))
-    outputFile.set(layout.buildDirectory.file("bundle/GradlewWrapperNeo.java"))
+    outputFile.set(layout.buildDirectory.file("bundle/GradleWrapperNeo.java"))
 }
 
-val compileGradlewWrapperNeo = tasks.register<JavaCompile>("compileGradlewWrapperNeo") {
-    dependsOn(generateGradlewWrapperNeo)
-    source(generateGradlewWrapperNeo.flatMap { it.outputFile })
+val compileGradleWrapperNeo = tasks.register<JavaCompile>("compileGradleWrapperNeo") {
+    dependsOn(generateGradleWrapperNeo)
+    source(generateGradleWrapperNeo.flatMap { it.outputFile })
     classpath = files()
     destinationDirectory.set(layout.buildDirectory.dir("classes/gradlew-wrapper-neo"))
     options.encoding = "UTF-8"
+    options.release.set(8)
 }
 
 tasks.build {
-    dependsOn(compileGradlewWrapperNeo)
+    dependsOn(compileGradleWrapperNeo)
 }
