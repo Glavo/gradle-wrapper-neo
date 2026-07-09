@@ -19,6 +19,7 @@ package org.gradle.wrapper;
 import org.gradle.cli.CommandLineParser;
 import org.gradle.cli.ParsedCommandLine;
 import org.gradle.cli.SystemPropertiesCommandLineConverter;
+import org.gradle.wrapper.neo.Bootstrap;
 import org.jspecify.annotations.NullMarked;
 
 import java.io.File;
@@ -38,6 +39,10 @@ public class GradleWrapperMain {
     public static final String GRADLE_QUIET_DETAILED_OPTION = "quiet";
 
     public static void main(String[] args) throws Exception {
+        if (Bootstrap.handle(args, GradleWrapperMain.class)) {
+            return;
+        }
+
         File wrapperJar = wrapperJar();
         prepareWrapper(args, wrapperJar).execute();
     }
@@ -106,11 +111,19 @@ public class GradleWrapperMain {
     }
 
     private static File rootDir(File wrapperJar) {
-        return wrapperJar.getParentFile().getParentFile().getParentFile();
+        return wrapperDir(wrapperJar).getParentFile().getParentFile();
     }
 
     private static File wrapperProperties(File wrapperJar) {
-        return new File(wrapperJar.getParent(), wrapperJar.getName().replaceFirst("\\.jar$", ".properties"));
+        return new File(wrapperDir(wrapperJar), "gradle-wrapper.properties");
+    }
+
+    private static File wrapperDir(File wrapperJar) {
+        File parent = wrapperJar.getParentFile();
+        if (parent.getName().equals(".gradle-wrapper-neo")) {
+            return parent.getParentFile();
+        }
+        return parent;
     }
 
     private static File wrapperJar() {

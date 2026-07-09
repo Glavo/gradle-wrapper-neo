@@ -202,16 +202,67 @@ fi
 # Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 
+# Select the wrapper entry point. GradleWrapperNeo.java is compiled to a temporary
+# classes directory only for the first bootstrap; Java packages the final JAR.
+WRAPPER_DIR=$APP_HOME/gradle/wrapper
+NEO_WORK_DIR=$WRAPPER_DIR/.gradle-wrapper-neo
+NEO_SOURCE=$WRAPPER_DIR/GradleWrapperNeo.java
+NEO_JAR=$WRAPPER_DIR/gradle-wrapper-neo.jar
+NEO_BOOTSTRAP_DIR=$NEO_WORK_DIR/bootstrap/$$
+NEO_CLASSES_DIR=$NEO_BOOTSTRAP_DIR/classes
+
+if [ -f "$NEO_SOURCE" ] ; then
+    if [ -f "$NEO_JAR" ] ; then
+        set -- \
+                "-Dorg.gradle.appname=$APP_BASE_NAME" \
+                -jar "$NEO_JAR" \
+                "$@"
+    else
+        if [ -n "$JAVA_HOME" ] ; then
+            JAVACMD_COMPILER=$JAVA_HOME/bin/javac
+        else
+            JAVACMD_COMPILER=javac
+        fi
+        if ! command -v "$JAVACMD_COMPILER" >/dev/null 2>&1
+        then
+            die "ERROR: GradleWrapperNeo.java exists, but javac could not be found.
+
+Please run this wrapper with a JDK, or provide $NEO_JAR."
+        fi
+
+        rm -rf "$NEO_CLASSES_DIR"
+        mkdir -p "$NEO_CLASSES_DIR" || exit
+        JAVAC_VERSION=$("$JAVACMD_COMPILER" -version 2>&1)
+        case "$JAVAC_VERSION" in
+          javac\ 1.*) JAVAC_TARGET_ARGS="-source 8 -target 8" ;;
+          *)          JAVAC_TARGET_ARGS="--release 8" ;;
+        esac
+        # shellcheck disable=SC2086
+        if ! "$JAVACMD_COMPILER" $JAVAC_TARGET_ARGS -encoding UTF-8 -d "$NEO_CLASSES_DIR" "$NEO_SOURCE"
+        then
+            rm -rf "$NEO_CLASSES_DIR"
+            die "ERROR: Could not compile $NEO_SOURCE"
+        fi
+
+        set -- \
+                "-Dorg.gradle.appname=$APP_BASE_NAME" \
+                "-Dgradle.wrapper.neo.bootstrap=true" \
+                "-Dgradle.wrapper.neo.source=$NEO_SOURCE" \
+                "-Dgradle.wrapper.neo.jar=$NEO_JAR" \
+                "-Dgradle.wrapper.neo.classesDir=$NEO_CLASSES_DIR" \
+                -cp "$NEO_CLASSES_DIR" \
+                GradleWrapperNeo \
+                "$@"
+    fi
+else
+    die "ERROR: $NEO_SOURCE was not found."
+fi
+
 # Collect all arguments for the java command:
 #   * DEFAULT_JVM_OPTS, JAVA_OPTS, and optsEnvironmentVar are not allowed to contain shell fragments,
 #     and any embedded shellness will be escaped.
 #   * For example: A user cannot expect ${Hostname} to be expanded, as it is an environment variable and will be
 #     treated as '${Hostname}' itself on the command line.
-
-set -- \
-        "-Dorg.gradle.appname=$APP_BASE_NAME" \
-        -jar "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" \
-        "$@"
 
 # Stop when "xargs" is not available.
 if ! command -v xargs >/dev/null 2>&1

@@ -52,6 +52,7 @@ echo Please set the JAVA_HOME variable in your environment to match the 1>&2
 echo location of your Java installation. 1>&2
 
 "%COMSPEC%" /c exit 1
+exit /b 1
 
 :findJavaFromJavaHome
 set JAVA_HOME=%JAVA_HOME:"=%
@@ -66,16 +67,82 @@ echo Please set the JAVA_HOME variable in your environment to match the 1>&2
 echo location of your Java installation. 1>&2
 
 "%COMSPEC%" /c exit 1
+exit /b 1
 
 :execute
 @rem Setup the command line
 
+set WRAPPER_DIR=%APP_HOME%\gradle\wrapper
+set NEO_WORK_DIR=%WRAPPER_DIR%\.gradle-wrapper-neo
+set NEO_SOURCE=%WRAPPER_DIR%\GradleWrapperNeo.java
+set NEO_JAR=%WRAPPER_DIR%\gradle-wrapper-neo.jar
+set NEO_BOOTSTRAP_DIR=%NEO_WORK_DIR%\bootstrap\%RANDOM%-%RANDOM%
+set NEO_CLASSES_DIR=%NEO_BOOTSTRAP_DIR%\classes
 
+if not exist "%NEO_SOURCE%" goto missingNeoSource
+if exist "%NEO_JAR%" goto executeNeoJar
 
-@rem Execute gradlew
-@rem endlocal doesn't take effect until after the line is parsed and variables are expanded
-@rem which allows us to clear the local environment before executing the java command
-endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -jar "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar" %* & call :exitWithErrorLevel
+if defined JAVA_HOME (
+    set JAVAC_EXE=%JAVA_HOME%\bin\javac.exe
+) else (
+    set JAVAC_EXE=javac.exe
+)
+
+"%JAVAC_EXE%" -version >NUL 2>&1
+if %ERRORLEVEL% equ 0 goto compileNeoSource
+
+echo. 1>&2
+echo ERROR: GradleWrapperNeo.java exists, but javac could not be found. 1>&2
+echo. 1>&2
+echo Please run this wrapper with a JDK, or provide %NEO_JAR%. 1>&2
+
+"%COMSPEC%" /c exit 1
+exit /b 1
+
+:compileNeoSource
+if exist "%NEO_CLASSES_DIR%" rmdir /s /q "%NEO_CLASSES_DIR%" >NUL 2>&1
+mkdir "%NEO_CLASSES_DIR%" >NUL 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo. 1>&2
+    echo ERROR: Could not create temporary directory %NEO_CLASSES_DIR%. 1>&2
+    "%COMSPEC%" /c exit 1
+    exit /b 1
+)
+
+for /f "tokens=2 delims= " %%v in ('"%JAVAC_EXE%" -version 2^>^&1') do set JAVAC_VERSION=%%v
+echo %JAVAC_VERSION% | findstr /b "1." >NUL
+if %ERRORLEVEL% equ 0 (
+    set JAVAC_TARGET_ARGS=-source 8 -target 8
+) else (
+    set JAVAC_TARGET_ARGS=--release 8
+)
+
+"%JAVAC_EXE%" %JAVAC_TARGET_ARGS% -encoding UTF-8 -d "%NEO_CLASSES_DIR%" "%NEO_SOURCE%"
+if %ERRORLEVEL% equ 0 goto executeNeoBootstrap
+
+rmdir /s /q "%NEO_CLASSES_DIR%" >NUL 2>&1
+echo. 1>&2
+echo ERROR: Could not compile %NEO_SOURCE%. 1>&2
+
+"%COMSPEC%" /c exit 1
+exit /b 1
+
+:executeNeoBootstrap
+@rem Execute GradleWrapperNeo from temporary classes. Java packages the final JAR.
+endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dgradle.wrapper.neo.bootstrap=true" "-Dgradle.wrapper.neo.source=%NEO_SOURCE%" "-Dgradle.wrapper.neo.jar=%NEO_JAR%" "-Dgradle.wrapper.neo.classesDir=%NEO_CLASSES_DIR%" -cp "%NEO_CLASSES_DIR%" GradleWrapperNeo %* & call :exitWithErrorLevel
+goto :eof
+
+:executeNeoJar
+@rem Execute GradleWrapperNeo from the cached JAR.
+endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -jar "%NEO_JAR%" %* & call :exitWithErrorLevel
+goto :eof
+
+:missingNeoSource
+echo. 1>&2
+echo ERROR: %NEO_SOURCE% was not found. 1>&2
+
+"%COMSPEC%" /c exit 1
+exit /b 1
 
 :exitWithErrorLevel
 @rem Use "%COMSPEC%" /c exit to allow operators to work properly in scripts
