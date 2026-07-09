@@ -4,13 +4,10 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Modifier;
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
@@ -75,9 +72,7 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
             CompilationUnit compilationUnit = parse(sourceFile);
             Map<String, String> projectStaticImports = collectImports(compilationUnit, imports);
 
-            compilationUnit.removePackageDeclaration();
             compilationUnit.getImports().clear();
-            removeJSpecifyAnnotations(compilationUnit);
             rewriteProjectStaticImportUsages(compilationUnit, projectStaticImports);
             renameMainClassReferences(compilationUnit, mainClassName);
             configureTopLevelTypes(compilationUnit, mainClassName, sourceRoot, sourceFile, topLevelTypes);
@@ -110,13 +105,13 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
     private static CompilationUnit parse(Path sourceFile) {
         try {
             String source = new String(Files.readAllBytes(sourceFile), StandardCharsets.UTF_8);
-            return StaticJavaParser.parse(commentOutPackageAndJSpecify(source));
+            return StaticJavaParser.parse(prepareSourceForDefaultPackageMerge(source));
         } catch (IOException e) {
             throw new UncheckedIOException("Could not parse " + sourceFile, e);
         }
     }
 
-    private static String commentOutPackageAndJSpecify(String source) {
+    private static String prepareSourceForDefaultPackageMerge(String source) {
         StringBuilder result = new StringBuilder(source.length());
         String[] lines = source.split("\\R", -1);
         for (int i = 0; i < lines.length; i++) {
@@ -127,9 +122,11 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
             String line = lines[i];
             String trimmedLine = line.trim();
             String leadingWhitespace = line.substring(0, line.length() - line.stripLeading().length());
-            if (trimmedLine.startsWith("package ")
-                || trimmedLine.startsWith("import " + JSPECIFY_PACKAGE_PREFIX)
-                || isStandaloneJSpecifyAnnotation(trimmedLine)) {
+            if (trimmedLine.startsWith("import " + JSPECIFY_PACKAGE_PREFIX)) {
+                continue;
+            }
+
+            if (trimmedLine.startsWith("package ") || isStandaloneJSpecifyAnnotation(trimmedLine)) {
                 result.append(leadingWhitespace).append("// ").append(trimmedLine).append('\n');
             } else {
                 result.append(commentOutInlineJSpecifyAnnotations(line)).append('\n');
@@ -160,10 +157,6 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
         for (ImportDeclaration importDeclaration : compilationUnit.getImports()) {
             String importName = importDeclaration.getNameAsString();
 
-            if (importName.startsWith(JSPECIFY_PACKAGE_PREFIX)) {
-                continue;
-            }
-
             if (importDeclaration.isStatic() && importName.startsWith(PROJECT_PACKAGE_PREFIX)) {
                 if (importDeclaration.isAsterisk()) {
                     throw new GradleException("Project static wildcard imports are not supported: " + importDeclaration);
@@ -181,26 +174,6 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
         }
 
         return projectStaticImports;
-    }
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private static void removeJSpecifyAnnotations(CompilationUnit compilationUnit) {
-        compilationUnit.walk(Node.class, node -> {
-            if (node instanceof NodeWithAnnotations) {
-                NodeWithAnnotations annotatedNode = (NodeWithAnnotations) node;
-                annotatedNode.getAnnotations().removeIf(annotation -> isJSpecifyAnnotation((AnnotationExpr) annotation));
-            }
-        });
-    }
-
-    private static boolean isJSpecifyAnnotation(AnnotationExpr annotation) {
-        String name = annotation.getNameAsString();
-        return name.equals("NullMarked")
-            || name.equals("Nullable")
-            || name.equals("NullUnmarked")
-            || name.equals(JSPECIFY_PACKAGE_PREFIX + "NullMarked")
-            || name.equals(JSPECIFY_PACKAGE_PREFIX + "Nullable")
-            || name.equals(JSPECIFY_PACKAGE_PREFIX + "NullUnmarked");
     }
 
     private static void rewriteProjectStaticImportUsages(CompilationUnit compilationUnit, Map<String, String> projectStaticImports) {
@@ -287,10 +260,18 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
 
         try {
             Files.createDirectories(outputPath.getParent());
-            Files.write(outputPath, normalizeCommentedInlineAnnotations(output.toString()).getBytes(StandardCharsets.UTF_8));
+            Files.write(outputPath, normalizeGeneratedSource(output.toString()).getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new UncheckedIOException("Could not write " + outputPath, e);
         }
+    }
+
+    private static String normalizeGeneratedSource(String source) {
+        return normalizePackageCommentSpacing(normalizeCommentedInlineAnnotations(source));
+    }
+
+    private static String normalizePackageCommentSpacing(String source) {
+        return source.replaceAll("(?m)^(\\s*// package [^\\r\\n]+)\\R(?!\\R)", "$1\n\n");
     }
 
     private static String normalizeCommentedInlineAnnotations(String source) {
