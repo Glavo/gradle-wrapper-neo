@@ -228,7 +228,7 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
             importLines.add(importDeclaration.toString().trim());
         }
 
-        Set<String> sortedImportLines = importLines.stream()
+        Set<String> sortedImportLines = normalizeImportLines(importLines).stream()
             .sorted()
             .collect(Collectors.toCollection(LinkedHashSet::new));
 
@@ -250,6 +250,36 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
         } catch (IOException e) {
             throw new UncheckedIOException("Could not write " + outputPath, e);
         }
+    }
+
+    private static List<String> normalizeImportLines(List<String> importLines) {
+        Set<String> wildcardImportedPackages = importLines.stream()
+            .filter(importLine -> !importLine.startsWith("import static ") && importLine.endsWith(".*;"))
+            .map(GenerateSingleJavaWrapperTask::packageNameFromWildcardImport)
+            .collect(Collectors.toSet());
+
+        return importLines.stream()
+            .filter(importLine -> shouldKeepImportLine(importLine, wildcardImportedPackages))
+            .collect(Collectors.toList());
+    }
+
+    private static boolean shouldKeepImportLine(String importLine, Set<String> wildcardImportedPackages) {
+        if (importLine.startsWith("import static ") || importLine.endsWith(".*;")) {
+            return true;
+        }
+
+        String importedType = importLine.substring("import ".length(), importLine.length() - 1);
+        int packageSeparator = importedType.lastIndexOf('.');
+        if (packageSeparator < 0) {
+            return true;
+        }
+
+        String packageName = importedType.substring(0, packageSeparator);
+        return !wildcardImportedPackages.contains(packageName);
+    }
+
+    private static String packageNameFromWildcardImport(String importLine) {
+        return importLine.substring("import ".length(), importLine.length() - ".*;".length());
     }
 
     private static final class StaticImportParts {
