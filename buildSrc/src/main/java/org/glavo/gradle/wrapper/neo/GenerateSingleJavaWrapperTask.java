@@ -36,6 +36,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -43,6 +44,7 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
     private static final String ORIGINAL_MAIN_CLASS_NAME = "GradleWrapperMain";
     private static final String PROJECT_PACKAGE_PREFIX = "org.gradle.";
     private static final String JSPECIFY_PACKAGE_PREFIX = "org.jspecify.annotations.";
+    private static final Pattern JSPECIFY_ANNOTATION_PATTERN = Pattern.compile("@(?:org\\.jspecify\\.annotations\\.)?(NullMarked|Nullable|NullUnmarked)\\b");
 
     public GenerateSingleJavaWrapperTask() {
         getMainClassName().convention("GradlewWrapperNeo");
@@ -107,10 +109,49 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
 
     private static CompilationUnit parse(Path sourceFile) {
         try {
-            return StaticJavaParser.parse(sourceFile);
+            String source = new String(Files.readAllBytes(sourceFile), StandardCharsets.UTF_8);
+            return StaticJavaParser.parse(commentOutPackageAndJSpecify(source));
         } catch (IOException e) {
             throw new UncheckedIOException("Could not parse " + sourceFile, e);
         }
+    }
+
+    private static String commentOutPackageAndJSpecify(String source) {
+        StringBuilder result = new StringBuilder(source.length());
+        String[] lines = source.split("\\R", -1);
+        for (int i = 0; i < lines.length; i++) {
+            if (i == lines.length - 1 && lines[i].isEmpty()) {
+                break;
+            }
+
+            String line = lines[i];
+            String trimmedLine = line.trim();
+            String leadingWhitespace = line.substring(0, line.length() - line.stripLeading().length());
+            if (trimmedLine.startsWith("package ")
+                || trimmedLine.startsWith("import " + JSPECIFY_PACKAGE_PREFIX)
+                || isStandaloneJSpecifyAnnotation(trimmedLine)) {
+                result.append(leadingWhitespace).append("// ").append(trimmedLine).append('\n');
+            } else {
+                result.append(commentOutInlineJSpecifyAnnotations(line)).append('\n');
+            }
+        }
+        return result.toString();
+    }
+
+    private static boolean isStandaloneJSpecifyAnnotation(String line) {
+        return line.equals("@NullMarked")
+            || line.equals("@Nullable")
+            || line.equals("@NullUnmarked")
+            || line.startsWith("@NullMarked(")
+            || line.startsWith("@Nullable(")
+            || line.startsWith("@NullUnmarked(")
+            || line.equals("@" + JSPECIFY_PACKAGE_PREFIX + "NullMarked")
+            || line.equals("@" + JSPECIFY_PACKAGE_PREFIX + "Nullable")
+            || line.equals("@" + JSPECIFY_PACKAGE_PREFIX + "NullUnmarked");
+    }
+
+    private static String commentOutInlineJSpecifyAnnotations(String line) {
+        return JSPECIFY_ANNOTATION_PATTERN.matcher(line).replaceAll("/* // @$1 */");
     }
 
     private static Map<String, String> collectImports(CompilationUnit compilationUnit, Map<String, ImportDeclaration> imports) {
@@ -246,10 +287,14 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
 
         try {
             Files.createDirectories(outputPath.getParent());
-            Files.write(outputPath, output.toString().getBytes(StandardCharsets.UTF_8));
+            Files.write(outputPath, normalizeCommentedInlineAnnotations(output.toString()).getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new UncheckedIOException("Could not write " + outputPath, e);
         }
+    }
+
+    private static String normalizeCommentedInlineAnnotations(String source) {
+        return source.replaceAll("(/\\* // @(?:NullMarked|Nullable|NullUnmarked) \\*/)\\R\\s+", "$1 ");
     }
 
     private static List<String> normalizeImportLines(List<String> importLines) {
