@@ -230,13 +230,11 @@ fi
 PROJECT_NEO_SOURCE=$APP_HOME/gradle/wrapper/GradleWrapperNeo.java
 if [ -f "$PROJECT_NEO_SOURCE" ] ; then
     NEO_SOURCE=$PROJECT_NEO_SOURCE
-    NEO_CACHE_SLOT=project
 else
     NEO_SOURCE=$LAUNCHER_WRAPPER_DIR/GradleWrapperNeo.java
-    NEO_CACHE_SLOT=launcher
 fi
 
-NEO_WORK_DIR=$APP_HOME/.gradle/wrapper-neo/$NEO_CACHE_SLOT
+NEO_WORK_DIR=$APP_HOME/.gradle/wrapper-neo
 NEO_JAR=$NEO_WORK_DIR/gradle-wrapper-neo.jar
 NEO_BOOTSTRAP_DIR=$NEO_WORK_DIR/bootstrap/$$
 NEO_CLASSES_DIR=$NEO_BOOTSTRAP_DIR/classes

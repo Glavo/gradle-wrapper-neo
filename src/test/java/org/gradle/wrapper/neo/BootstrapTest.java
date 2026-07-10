@@ -34,7 +34,7 @@ class BootstrapTest {
     void readsExplicitPathsFromSystemProperties() {
         Path appHome = temporaryDirectory.resolve("project");
         Path sourceFile = temporaryDirectory.resolve("launcher/GradleWrapperNeo.java");
-        Path jarFile = appHome.resolve(".gradle/wrapper-neo/launcher/gradle-wrapper-neo.jar");
+        Path jarFile = appHome.resolve(".gradle/wrapper-neo/gradle-wrapper-neo.jar");
         String originalAppHome = System.getProperty(Bootstrap.APP_HOME_PROPERTY);
         String originalSourceFile = System.getProperty(Bootstrap.SOURCE_FILE_PROPERTY);
         String originalJarFile = System.getProperty(Bootstrap.JAR_FILE_PROPERTY);
@@ -88,7 +88,7 @@ class BootstrapTest {
     void forwardsExplicitPathsAndRemovesInternalProperties() {
         Path appHome = temporaryDirectory.resolve("project");
         Path sourceFile = temporaryDirectory.resolve("launcher/GradleWrapperNeo.java");
-        Path jarFile = appHome.resolve(".gradle/wrapper-neo/launcher/gradle-wrapper-neo.jar");
+        Path jarFile = appHome.resolve(".gradle/wrapper-neo/gradle-wrapper-neo.jar");
 
         List<String> result = Bootstrap.forwardedJvmArguments(
             Arrays.asList(

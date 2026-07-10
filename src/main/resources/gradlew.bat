@@ -96,15 +96,13 @@ for %%d in ("%LAUNCHER_HOME%\.") do set "APP_HOME=%%~fd"
 set "PROJECT_NEO_SOURCE=%APP_HOME%\gradle\wrapper\GradleWrapperNeo.java"
 if exist "%PROJECT_NEO_SOURCE%" goto useProjectNeoSource
 set "NEO_SOURCE=%LAUNCHER_WRAPPER_DIR%\GradleWrapperNeo.java"
-set "NEO_CACHE_SLOT=launcher"
 goto neoSourceSelected
 
 :useProjectNeoSource
 set "NEO_SOURCE=%PROJECT_NEO_SOURCE%"
-set "NEO_CACHE_SLOT=project"
 
 :neoSourceSelected
-set "NEO_WORK_DIR=%APP_HOME%\.gradle\wrapper-neo\%NEO_CACHE_SLOT%"
+set "NEO_WORK_DIR=%APP_HOME%\.gradle\wrapper-neo"
 set "NEO_JAR=%NEO_WORK_DIR%\gradle-wrapper-neo.jar"
 set "NEO_BOOTSTRAP_DIR=%NEO_WORK_DIR%\bootstrap\%RANDOM%-%RANDOM%"
 set "NEO_CLASSES_DIR=%NEO_BOOTSTRAP_DIR%\classes"
