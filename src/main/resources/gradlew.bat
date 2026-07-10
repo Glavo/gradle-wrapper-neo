@@ -72,12 +72,41 @@ exit /b 1
 :execute
 @rem Setup the command line
 
-set WRAPPER_DIR=%APP_HOME%\gradle\wrapper
-set NEO_WORK_DIR=%WRAPPER_DIR%\.gradle-wrapper-neo
-set NEO_SOURCE=%WRAPPER_DIR%\GradleWrapperNeo.java
-set NEO_JAR=%NEO_WORK_DIR%\gradle-wrapper-neo.jar
-set NEO_BOOTSTRAP_DIR=%NEO_WORK_DIR%\bootstrap\%RANDOM%-%RANDOM%
-set NEO_CLASSES_DIR=%NEO_BOOTSTRAP_DIR%\classes
+set "LAUNCHER_WRAPPER_DIR=%APP_HOME%\gradle\wrapper"
+set "PROJECT_WRAPPER_DIR="
+
+if exist "%LAUNCHER_WRAPPER_DIR%\gradle-wrapper.properties" goto localNeoWrapper
+
+set "NEO_SEARCH_DIR=%CD%"
+:findNeoProjectWrapper
+if exist "%NEO_SEARCH_DIR%\gradle\wrapper\gradle-wrapper.properties" goto foundNeoProjectWrapper
+for %%d in ("%NEO_SEARCH_DIR%\..") do set "NEO_PARENT_DIR=%%~fd"
+if /i "%NEO_PARENT_DIR%"=="%NEO_SEARCH_DIR%" goto missingWrapperProperties
+set "NEO_SEARCH_DIR=%NEO_PARENT_DIR%"
+goto findNeoProjectWrapper
+
+:foundNeoProjectWrapper
+set "PROJECT_WRAPPER_DIR=%NEO_SEARCH_DIR%\gradle\wrapper"
+goto selectNeoSource
+
+:localNeoWrapper
+set "PROJECT_WRAPPER_DIR=%LAUNCHER_WRAPPER_DIR%"
+
+:selectNeoSource
+if exist "%PROJECT_WRAPPER_DIR%\GradleWrapperNeo.java" goto useProjectNeoSource
+set "WRAPPER_DIR=%LAUNCHER_WRAPPER_DIR%"
+goto neoSourceSelected
+
+:useProjectNeoSource
+set "WRAPPER_DIR=%PROJECT_WRAPPER_DIR%"
+
+:neoSourceSelected
+set "NEO_WORK_DIR=%PROJECT_WRAPPER_DIR%\.gradle-wrapper-neo"
+set "NEO_SOURCE=%WRAPPER_DIR%\GradleWrapperNeo.java"
+set "NEO_JAR=%NEO_WORK_DIR%\gradle-wrapper-neo-global.jar"
+if exist "%WRAPPER_DIR%\gradle-wrapper.properties" set "NEO_JAR=%NEO_WORK_DIR%\gradle-wrapper-neo.jar"
+set "NEO_BOOTSTRAP_DIR=%NEO_WORK_DIR%\bootstrap\%RANDOM%-%RANDOM%"
+set "NEO_CLASSES_DIR=%NEO_BOOTSTRAP_DIR%\classes"
 
 if not exist "%NEO_SOURCE%" goto missingNeoSource
 if exist "%NEO_JAR%" goto executeNeoJar
@@ -94,7 +123,7 @@ if %ERRORLEVEL% equ 0 goto compileNeoSource
 echo. 1>&2
 echo ERROR: GradleWrapperNeo.java exists, but javac could not be found. 1>&2
 echo. 1>&2
-echo Please run this wrapper with a JDK, or provide %NEO_JAR%. 1>&2
+echo Please run this wrapper with a JDK so GradleWrapperNeo.java can be compiled. 1>&2
 
 "%COMSPEC%" /c exit 1
 exit /b 1
@@ -136,6 +165,13 @@ goto :eof
 @rem Execute GradleWrapperNeo from the cached JAR.
 endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.wrapper.neo.wrapper-dir=%WRAPPER_DIR%" -jar "%NEO_JAR%" %* & call :exitWithErrorLevel
 goto :eof
+
+:missingWrapperProperties
+echo. 1>&2
+echo ERROR: Could not find gradle/wrapper/gradle-wrapper.properties searching from "%CD%". 1>&2
+
+"%COMSPEC%" /c exit 1
+exit /b 1
 
 :missingNeoSource
 echo. 1>&2

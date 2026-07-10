@@ -121,6 +121,28 @@ public class GradleWrapperMain {
     }
 
     static File wrapperDir(File wrapperJar) {
+        return wrapperDir(wrapperJar, new File(System.getProperty("user.dir")));
+    }
+
+    static File wrapperDir(File wrapperJar, File currentDirectory) {
+        File sourceWrapperDir = sourceWrapperDir(wrapperJar);
+        if (new File(sourceWrapperDir, "gradle-wrapper.properties").isFile()) {
+            return sourceWrapperDir;
+        }
+
+        for (File directory = currentDirectory.getAbsoluteFile(); directory != null; directory = directory.getParentFile()) {
+            File propertiesFile = WrapperExecutor.wrapperPropertiesForProjectDirectory(directory);
+            if (propertiesFile.isFile()) {
+                return propertiesFile.getParentFile();
+            }
+        }
+
+        throw new RuntimeException(
+            "Could not find gradle/wrapper/gradle-wrapper.properties searching from " + currentDirectory.getAbsolutePath() + "."
+        );
+    }
+
+    static File sourceWrapperDir(File wrapperJar) {
         String configuredWrapperDir = System.getProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
         if (configuredWrapperDir != null && !configuredWrapperDir.isEmpty()) {
             return new File(configuredWrapperDir);

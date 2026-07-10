@@ -18,6 +18,8 @@ package org.gradle.wrapper.neo;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -57,11 +59,46 @@ class BootstrapTest {
     }
 
     @Test
-    void derivesSourceAndJarFromWrapperDirectory() {
+    void derivesSourceAndJarFromLocalWrapperDirectory() throws IOException {
         Path wrapperDir = temporaryDirectory.resolve("custom-wrapper");
+        Files.createDirectories(wrapperDir);
+        Files.createFile(wrapperDir.resolve("gradle-wrapper.properties"));
 
         assertEquals(wrapperDir.resolve("GradleWrapperNeo.java"), Bootstrap.sourceFile(wrapperDir));
         assertEquals(wrapperDir.resolve(".gradle-wrapper-neo/gradle-wrapper-neo.jar"), Bootstrap.targetJar(wrapperDir));
+    }
+
+    @Test
+    void usesProjectWrapperCacheWithGlobalSource() throws IOException {
+        Path sourceWrapperDir = temporaryDirectory.resolve("global/gradle/wrapper");
+        Path projectDir = temporaryDirectory.resolve("project");
+        Path projectWrapperDir = projectDir.resolve("gradle/wrapper");
+        Path currentDirectory = projectDir.resolve("nested/subproject");
+        Files.createDirectories(sourceWrapperDir);
+        Files.createDirectories(projectWrapperDir);
+        Files.createFile(projectWrapperDir.resolve("gradle-wrapper.properties"));
+
+        assertEquals(projectWrapperDir, Bootstrap.projectWrapperDir(sourceWrapperDir, currentDirectory));
+        assertEquals(
+            projectWrapperDir.resolve(".gradle-wrapper-neo/gradle-wrapper-neo-global.jar"),
+            Bootstrap.targetJar(sourceWrapperDir, currentDirectory)
+        );
+    }
+
+    @Test
+    void rejectsGlobalSourceOutsideAWrapperProject() {
+        Path sourceWrapperDir = temporaryDirectory.resolve("global/gradle/wrapper");
+        Path currentDirectory = temporaryDirectory.resolve("project/without-wrapper");
+
+        RuntimeException failure = assertThrows(
+            RuntimeException.class,
+            () -> Bootstrap.projectWrapperDir(sourceWrapperDir, currentDirectory)
+        );
+
+        assertEquals(
+            "Could not find gradle/wrapper/gradle-wrapper.properties searching from " + currentDirectory.toAbsolutePath() + ".",
+            failure.getMessage()
+        );
     }
 
     @Test

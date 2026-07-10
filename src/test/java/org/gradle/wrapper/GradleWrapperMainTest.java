@@ -22,11 +22,15 @@ import org.junit.jupiter.api.io.TempDir;
 import org.gradle.wrapper.neo.Bootstrap;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GradleWrapperMainTest {
 
@@ -34,14 +38,17 @@ class GradleWrapperMainTest {
     Path temporaryDirectory;
 
     @Test
-    void resolvesProjectPathsFromWrapperDirectorySystemProperty() {
+    void resolvesLocalProjectPathsFromSourceWrapperDirectory() throws IOException {
         File projectDir = temporaryDirectory.toFile();
         File wrapperDir = new File(projectDir, "gradle/wrapper");
         File jarFile = temporaryDirectory.resolve("unrelated/cache/gradle-wrapper-neo.jar").toFile();
+        assertTrue(wrapperDir.mkdirs());
+        assertTrue(new File(wrapperDir, "gradle-wrapper.properties").createNewFile());
         String originalValue = System.getProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
         try {
             System.setProperty(Bootstrap.WRAPPER_DIR_PROPERTY, wrapperDir.getPath());
 
+            assertEquals(wrapperDir, GradleWrapperMain.sourceWrapperDir(jarFile));
             assertEquals(wrapperDir, GradleWrapperMain.wrapperDir(jarFile));
             assertEquals(new File(wrapperDir, "gradle-wrapper.properties"), GradleWrapperMain.wrapperProperties(jarFile));
             assertEquals(projectDir, GradleWrapperMain.rootDir(jarFile));
@@ -51,13 +58,53 @@ class GradleWrapperMainTest {
     }
 
     @Test
-    void fallsBackToJarParentWhenWrapperDirectorySystemPropertyIsMissing() {
+    void findsNearestProjectWrapperInGlobalMode() throws IOException {
+        File sourceWrapperDir = temporaryDirectory.resolve("global/gradle/wrapper").toFile();
+        File outerProject = temporaryDirectory.resolve("projects/outer").toFile();
+        File innerProject = temporaryDirectory.resolve("projects/outer/nested/inner").toFile();
+        File currentDirectory = temporaryDirectory.resolve("projects/outer/nested/inner/subproject").toFile();
+        File outerWrapperDir = createWrapperProperties(outerProject);
+        File innerWrapperDir = createWrapperProperties(innerProject);
+        File jarFile = temporaryDirectory.resolve("project/gradle/wrapper/.gradle-wrapper-neo/gradle-wrapper-neo-global.jar").toFile();
+        String originalValue = System.getProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
+        try {
+            System.setProperty(Bootstrap.WRAPPER_DIR_PROPERTY, sourceWrapperDir.getPath());
+
+            assertEquals(innerWrapperDir, GradleWrapperMain.wrapperDir(jarFile, currentDirectory));
+            assertNotEquals(outerWrapperDir, innerWrapperDir);
+        } finally {
+            restoreProperty(Bootstrap.WRAPPER_DIR_PROPERTY, originalValue);
+        }
+    }
+
+    @Test
+    void rejectsGlobalModeOutsideAWrapperProject() {
+        File sourceWrapperDir = temporaryDirectory.resolve("global/gradle/wrapper").toFile();
+        File currentDirectory = temporaryDirectory.resolve("projects/without-wrapper/subproject").toFile();
+        File jarFile = temporaryDirectory.resolve("project/gradle/wrapper/.gradle-wrapper-neo/gradle-wrapper-neo-global.jar").toFile();
+        String originalValue = System.getProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
+        try {
+            System.setProperty(Bootstrap.WRAPPER_DIR_PROPERTY, sourceWrapperDir.getPath());
+
+            RuntimeException failure = assertThrows(RuntimeException.class, () -> GradleWrapperMain.wrapperDir(jarFile, currentDirectory));
+
+            assertEquals(
+                "Could not find gradle/wrapper/gradle-wrapper.properties searching from " + currentDirectory.getAbsolutePath() + ".",
+                failure.getMessage()
+            );
+        } finally {
+            restoreProperty(Bootstrap.WRAPPER_DIR_PROPERTY, originalValue);
+        }
+    }
+
+    @Test
+    void sourceWrapperDirectoryFallsBackToJarParentWhenSystemPropertyIsMissing() {
         File jarFile = temporaryDirectory.resolve("wrapper/gradle-wrapper.jar").toFile();
         String originalValue = System.getProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
         try {
             System.clearProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
 
-            assertEquals(jarFile.getParentFile(), GradleWrapperMain.wrapperDir(jarFile));
+            assertEquals(jarFile.getParentFile(), GradleWrapperMain.sourceWrapperDir(jarFile));
         } finally {
             restoreProperty(Bootstrap.WRAPPER_DIR_PROPERTY, originalValue);
         }
@@ -90,6 +137,13 @@ class GradleWrapperMainTest {
         parser.allowUnknownOptions();
         parser.option(GradleWrapperMain.GRADLE_USER_HOME_OPTION, GradleWrapperMain.GRADLE_USER_HOME_DETAILED_OPTION).hasArgument();
         return parser.parse(args);
+    }
+
+    private static File createWrapperProperties(File projectDir) throws IOException {
+        File wrapperDir = new File(projectDir, "gradle/wrapper");
+        assertTrue(wrapperDir.mkdirs());
+        assertTrue(new File(wrapperDir, "gradle-wrapper.properties").createNewFile());
+        return wrapperDir;
     }
 
     private static void restoreProperty(String property, String value) {

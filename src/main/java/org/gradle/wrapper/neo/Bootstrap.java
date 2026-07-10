@@ -49,10 +49,12 @@ import javax.tools.ToolProvider;
 public final class Bootstrap {
     private static final String MAIN_CLASS_NAME = "GradleWrapperNeo";
     private static final String JAR_FILE_NAME = "gradle-wrapper-neo.jar";
+    private static final String GLOBAL_JAR_FILE_NAME = "gradle-wrapper-neo-global.jar";
     private static final String WORK_DIR_NAME = ".gradle-wrapper-neo";
     private static final String CLASSES_DIR_NAME = "classes";
     private static final String LOCK_FILE_NAME = "lock";
     private static final String SOURCE_FILE_NAME = MAIN_CLASS_NAME + ".java";
+    private static final String WRAPPER_PROPERTIES_FILE_NAME = "gradle-wrapper.properties";
     private static final String BOOTSTRAP_PROPERTY = "gradle.wrapper.neo.bootstrap";
     public static final String WRAPPER_DIR_PROPERTY = "org.gradle.wrapper.neo.wrapper-dir";
     private static final String MANIFEST_SOURCE_SHA256 = "Gradle-Wrapper-Neo-Source-SHA256";
@@ -68,9 +70,9 @@ public final class Bootstrap {
             Path stagingClassesDir = codeSource(mainClass);
             int exitCode;
             try {
-                withLock(wrapperDir, () -> {
+                withLock(targetJar.getParent(), () -> {
                     if (!isCurrent(targetJar, sourceFile)) {
-                        Path classesDir = classesDir(wrapperDir);
+                        Path classesDir = classesDir(targetJar);
                         recreateDirectory(classesDir);
                         copyDirectory(stagingClassesDir, classesDir);
                         writeJar(sourceFile, classesDir, targetJar);
@@ -87,7 +89,11 @@ public final class Bootstrap {
         }
 
         Path currentJar = codeSource(mainClass);
-        if (!Files.isRegularFile(currentJar) || !currentJar.getFileName().toString().equals(JAR_FILE_NAME)) {
+        if (!Files.isRegularFile(currentJar)) {
+            return false;
+        }
+        String currentJarName = currentJar.getFileName().toString();
+        if (!currentJarName.equals(JAR_FILE_NAME) && !currentJarName.equals(GLOBAL_JAR_FILE_NAME)) {
             return false;
         }
 
@@ -97,33 +103,33 @@ public final class Bootstrap {
             return false;
         }
 
-            Path classesDir = classesDir(wrapperDir);
-            Path workDir = workDir(wrapperDir);
-            Files.createDirectories(workDir);
-            Path nextJar = Files.createTempFile(workDir, "gradle-wrapper-neo-", ".jar");
-            Path launchJar;
-            try {
-                launchJar = withLock(wrapperDir, () -> {
-                    if (isCurrent(currentJar, sourceFile)) {
-                        return currentJar;
-                    }
-                    compileSource(sourceFile, classesDir);
-                    writeJar(sourceFile, classesDir, nextJar);
-                    return installReplacement(nextJar, currentJar);
-                });
-            } catch (Exception e) {
-                Files.deleteIfExists(nextJar);
-                throw e;
-            }
-            int exitCode;
-            try {
-                exitCode = launchJar(launchJar, wrapperDir, args);
-            } finally {
-                Files.deleteIfExists(nextJar);
-            }
-            System.exit(exitCode);
-            return true;
+        Path targetJar = targetJar(wrapperDir);
+        Path classesDir = classesDir(targetJar);
+        Files.createDirectories(targetJar.getParent());
+        Path nextJar = Files.createTempFile(targetJar.getParent(), "gradle-wrapper-neo-", ".jar");
+        Path launchJar;
+        try {
+            launchJar = withLock(targetJar.getParent(), () -> {
+                if (isCurrent(targetJar, sourceFile)) {
+                    return targetJar;
+                }
+                compileSource(sourceFile, classesDir);
+                writeJar(sourceFile, classesDir, nextJar);
+                return installReplacement(nextJar, targetJar);
+            });
+        } catch (Exception e) {
+            Files.deleteIfExists(nextJar);
+            throw e;
         }
+        int exitCode;
+        try {
+            exitCode = launchJar(launchJar, wrapperDir, args);
+        } finally {
+            Files.deleteIfExists(nextJar);
+        }
+        System.exit(exitCode);
+        return true;
+    }
 
     private static Path codeSource(Class<?> mainClass) {
         URI location;
@@ -158,23 +164,48 @@ public final class Bootstrap {
         return wrapperDir.resolve(SOURCE_FILE_NAME);
     }
 
-    static Path targetJar(Path wrapperDir) {
-        return workDir(wrapperDir).resolve(JAR_FILE_NAME);
+    static Path targetJar(Path sourceWrapperDir) {
+        return targetJar(sourceWrapperDir, Paths.get(System.getProperty("user.dir")));
     }
 
-    private static Path classesDir(Path wrapperDir) {
-        return wrapperDir.resolve(WORK_DIR_NAME).resolve(CLASSES_DIR_NAME);
+    static Path targetJar(Path sourceWrapperDir, Path currentDirectory) {
+        String jarFileName = Files.isRegularFile(sourceWrapperDir.resolve(WRAPPER_PROPERTIES_FILE_NAME))
+            ? JAR_FILE_NAME
+            : GLOBAL_JAR_FILE_NAME;
+        return projectWrapperDir(sourceWrapperDir, currentDirectory)
+            .resolve(WORK_DIR_NAME)
+            .resolve(jarFileName);
     }
 
-    private static Path workDir(Path wrapperDir) {
-        return wrapperDir.resolve(WORK_DIR_NAME);
+    static Path projectWrapperDir(Path sourceWrapperDir) {
+        return projectWrapperDir(sourceWrapperDir, Paths.get(System.getProperty("user.dir")));
     }
 
-    private static <T> T withLock(Path wrapperDir, LockedAction<T> action) throws Exception {
-        Path workDir = workDir(wrapperDir);
-        Files.createDirectories(workDir);
+    static Path projectWrapperDir(Path sourceWrapperDir, Path currentDirectory) {
+        if (Files.isRegularFile(sourceWrapperDir.resolve(WRAPPER_PROPERTIES_FILE_NAME))) {
+            return sourceWrapperDir;
+        }
+
+        for (Path directory = currentDirectory.toAbsolutePath(); directory != null; directory = directory.getParent()) {
+            Path wrapperDir = directory.resolve("gradle").resolve("wrapper");
+            if (Files.isRegularFile(wrapperDir.resolve(WRAPPER_PROPERTIES_FILE_NAME))) {
+                return wrapperDir;
+            }
+        }
+
+        throw new RuntimeException(
+            "Could not find gradle/wrapper/gradle-wrapper.properties searching from " + currentDirectory.toAbsolutePath() + "."
+        );
+    }
+
+    private static Path classesDir(Path targetJar) {
+        return targetJar.getParent().resolve(CLASSES_DIR_NAME);
+    }
+
+    private static <T> T withLock(Path cacheDirectory, LockedAction<T> action) throws Exception {
+        Files.createDirectories(cacheDirectory);
         try (
-            FileChannel channel = FileChannel.open(workDir.resolve(LOCK_FILE_NAME), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+            FileChannel channel = FileChannel.open(cacheDirectory.resolve(LOCK_FILE_NAME), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
             FileLock ignored = channel.lock()
         ) {
             return action.execute();

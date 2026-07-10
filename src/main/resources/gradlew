@@ -204,15 +204,46 @@ DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 
 # Select the wrapper entry point. GradleWrapperNeo.java is compiled to a temporary
 # classes directory only for the first bootstrap; Java packages the final JAR.
-WRAPPER_DIR=$APP_HOME/gradle/wrapper
-NEO_WORK_DIR=$WRAPPER_DIR/.gradle-wrapper-neo
+LAUNCHER_WRAPPER_DIR=$APP_HOME/gradle/wrapper
+PROJECT_WRAPPER_DIR=
+
+if [ -f "$LAUNCHER_WRAPPER_DIR/gradle-wrapper.properties" ] ; then
+    PROJECT_WRAPPER_DIR=$LAUNCHER_WRAPPER_DIR
+else
+    NEO_SEARCH_DIR=$( pwd -P )
+    while [ -z "$PROJECT_WRAPPER_DIR" ] ; do
+        NEO_CANDIDATE_WRAPPER_DIR=$NEO_SEARCH_DIR/gradle/wrapper
+        if [ -f "$NEO_CANDIDATE_WRAPPER_DIR/gradle-wrapper.properties" ] ; then
+            PROJECT_WRAPPER_DIR=$NEO_CANDIDATE_WRAPPER_DIR
+        elif [ "$NEO_SEARCH_DIR" = / ] ; then
+            die "ERROR: Could not find gradle/wrapper/gradle-wrapper.properties searching from $( pwd -P )."
+        else
+            NEO_SEARCH_DIR=${NEO_SEARCH_DIR%/*}
+            if [ -z "$NEO_SEARCH_DIR" ] ; then
+                NEO_SEARCH_DIR=/
+            fi
+        fi
+    done
+fi
+
+if [ -f "$PROJECT_WRAPPER_DIR/GradleWrapperNeo.java" ] ; then
+    WRAPPER_DIR=$PROJECT_WRAPPER_DIR
+else
+    WRAPPER_DIR=$LAUNCHER_WRAPPER_DIR
+fi
+
 NEO_SOURCE=$WRAPPER_DIR/GradleWrapperNeo.java
-NEO_JAR=$NEO_WORK_DIR/gradle-wrapper-neo.jar
+NEO_WORK_DIR=$PROJECT_WRAPPER_DIR/.gradle-wrapper-neo
+if [ -f "$WRAPPER_DIR/gradle-wrapper.properties" ] ; then
+    NEO_JAR=$NEO_WORK_DIR/gradle-wrapper-neo.jar
+else
+    NEO_JAR=$NEO_WORK_DIR/gradle-wrapper-neo-global.jar
+fi
 NEO_BOOTSTRAP_DIR=$NEO_WORK_DIR/bootstrap/$$
 NEO_CLASSES_DIR=$NEO_BOOTSTRAP_DIR/classes
 
 if [ -f "$NEO_SOURCE" ] ; then
-    if [ -f "$NEO_JAR" ] ; then
+    if [ -n "$NEO_JAR" ] && [ -f "$NEO_JAR" ] ; then
         set -- \
                 "-Dorg.gradle.appname=$APP_BASE_NAME" \
                 "-Dorg.gradle.wrapper.neo.wrapper-dir=$WRAPPER_DIR" \
@@ -228,7 +259,7 @@ if [ -f "$NEO_SOURCE" ] ; then
         then
             die "ERROR: GradleWrapperNeo.java exists, but javac could not be found.
 
-Please run this wrapper with a JDK, or provide $NEO_JAR."
+Please run this wrapper with a JDK so GradleWrapperNeo.java can be compiled."
         fi
 
         rm -rf "$NEO_CLASSES_DIR"
