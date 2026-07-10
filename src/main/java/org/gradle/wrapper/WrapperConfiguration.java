@@ -16,6 +16,7 @@
 package org.gradle.wrapper;
 
 import java.net.URI;
+import java.util.List;
 
 public class WrapperConfiguration {
     private URI distribution;
@@ -28,6 +29,7 @@ public class WrapperConfiguration {
     private boolean validateDistributionUrl = true;
     private int retries = Install.DEFAULT_NETWORK_RETRIES;
     private int retryBackOffMs = Install.DEFAULT_NETWORK_RETRY_BACK_OFF_MS;
+    private MirrorConfiguration mirrorConfiguration = MirrorConfiguration.empty();
 
     public URI getDistribution() {
         return distribution;
@@ -35,6 +37,14 @@ public class WrapperConfiguration {
 
     public void setDistribution(URI distribution) {
         this.distribution = distribution;
+    }
+
+    List<URI> getDistributionUrls() {
+        return mirrorConfiguration.resolve(distribution, distributionSha256Sum != null);
+    }
+
+    void setMirrorConfiguration(MirrorConfiguration mirrorConfiguration) {
+        this.mirrorConfiguration = mirrorConfiguration;
     }
 
     public String getDistributionBase() {

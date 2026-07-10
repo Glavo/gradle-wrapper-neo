@@ -61,6 +61,7 @@ public class GradleWrapperMain {
         ParsedCommandLine options = parser.parse(args);
 
         Map<String, String> commandLineSystemProperties = converter.convert(options, new HashMap<String, String>());
+        File mirrorConfigurationHome = mirrorConfigurationHome(options, commandLineSystemProperties);
         Map<String, String> projectSystemProperties = PropertiesFileHandler.getSystemProperties(new File(rootDir, "gradle.properties"));
         // If the Gradle system properties may define a custom Gradle home, which needs to be set before loading user gradle.properties
         maybeAddGradleUserHomeSystemProperty(projectSystemProperties, commandLineSystemProperties);
@@ -80,6 +81,7 @@ public class GradleWrapperMain {
 
         WrapperExecutor wrapperExecutor = WrapperExecutor.forWrapperPropertiesFile(propertiesFile);
         WrapperConfiguration configuration = wrapperExecutor.getConfiguration();
+        configuration.setMirrorConfiguration(MirrorConfiguration.load(mirrorConfigurationHome));
         IDownload download = new Download(logger, "gradlew", UNKNOWN_VERSION, configuration.getNetworkTimeout());
 
         return () -> {
@@ -146,6 +148,17 @@ public class GradleWrapperMain {
     private static File gradleUserHome(ParsedCommandLine options) {
         if (options.hasOption(GRADLE_USER_HOME_OPTION)) {
             return new File(options.option(GRADLE_USER_HOME_OPTION).getValue());
+        }
+        return GradleUserHomeLookup.gradleUserHome();
+    }
+
+    static File mirrorConfigurationHome(ParsedCommandLine options, Map<String, String> commandLineSystemProperties) {
+        if (options.hasOption(GRADLE_USER_HOME_OPTION)) {
+            return new File(options.option(GRADLE_USER_HOME_OPTION).getValue());
+        }
+        String configuredHome = commandLineSystemProperties.get(GradleUserHomeLookup.GRADLE_USER_HOME_PROPERTY_KEY);
+        if (configuredHome != null) {
+            return new File(configuredHome);
         }
         return GradleUserHomeLookup.gradleUserHome();
     }

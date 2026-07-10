@@ -97,29 +97,58 @@ public class Install {
     }
 
     private void fetchDistribution(File localZipFile, URI distributionUrl, File distDir, WrapperConfiguration configuration) throws Exception {
+        List<URI> distributionUrls = configuration.getDistributionUrls();
+        for (int index = 0; index < distributionUrls.size(); index++) {
+            URI currentUrl = distributionUrls.get(index);
+            try {
+                fetchDistributionFrom(localZipFile, currentUrl, distributionUrl, distDir, configuration);
+                return;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw e;
+            } catch (Exception e) {
+                if (index + 1 >= distributionUrls.size()) {
+                    throw e;
+                }
+
+                localZipFile.delete();
+                deleteLocalTopLevelDirs(distDir);
+                logger.log("Download from " + safeUri(currentUrl) + " failed. Trying the next download location.");
+                logger.log("Reason: " + e.getMessage());
+            }
+        }
+        throw new IllegalStateException("No distribution download locations configured.");
+    }
+
+    private void fetchDistributionFrom(File localZipFile, URI distributionUrl, URI originalDistributionUrl, File distDir, WrapperConfiguration configuration) throws Exception {
         String distributionSha256Sum = configuration.getDistributionSha256Sum();
         boolean failed = false;
-        int retries = BROKEN_ZIP_RETRIES;
+        boolean originalLocation = distributionUrl.equals(originalDistributionUrl);
+        int retries = originalLocation ? BROKEN_ZIP_RETRIES : 1;
         do {
             try {
                 boolean needsDownload = !localZipFile.isFile() || failed;
                 if (needsDownload) {
-                    forceFetch(localZipFile, distributionUrl, configuration.getRetries(), configuration.getRetryBackOffMs());
+                    forceFetch(localZipFile, distributionUrl, originalLocation ? configuration.getRetries() : 0, configuration.getRetryBackOffMs());
                 }
 
                 deleteLocalTopLevelDirs(distDir);
 
-                verifyDownloadChecksum(configuration.getDistribution().toASCIIString(), localZipFile, distributionSha256Sum);
+                verifyDownloadChecksum(safeUri(distributionUrl).toASCIIString(), localZipFile, distributionSha256Sum);
 
                 unzipLocal(localZipFile, distDir);
+                InstallCheck installCheck = verifyDistributionRoot(distDir, safeUri(distributionUrl).toASCIIString());
+                if (!installCheck.isVerified()) {
+                    throw new RuntimeException(installCheck.failureMessage);
+                }
                 failed = false;
             } catch (ZipException e) {
-                if (retries >= BROKEN_ZIP_RETRIES && distributionSha256Sum == null) {
+                if (originalLocation && retries >= BROKEN_ZIP_RETRIES && distributionSha256Sum == null) {
                     distributionSha256Sum = fetchDistributionSha256Sum(configuration, localZipFile);
                 }
                 failed = true;
                 retries--;
-                if(retries <= 0){
+                if (retries <= 0) {
                     throw new RuntimeException("Downloaded distribution file " + localZipFile + " is no valid zip file.");
                 }
             }

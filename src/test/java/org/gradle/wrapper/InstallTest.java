@@ -21,6 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -37,6 +38,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InstallTest {
     private static final String ZIP_FILE_NAME = "gradle-0.9.zip";
     private static final byte[] BAD_ARCHIVE_CONTENT = "bad archive content".getBytes(StandardCharsets.UTF_8);
+    private static final URI OFFICIAL_DISTRIBUTION_URL = URI.create("https://services.gradle.org/distributions/" + ZIP_FILE_NAME);
+    private static final URI MIRROR_DISTRIBUTION_URL = URI.create("https://mirror.example/gradle/" + ZIP_FILE_NAME);
+    private static final String MIRROR_CONFIGURATION = "{" +
+        "\"version\":1," +
+        "\"mirrors\":[{" +
+        "\"pattern\":\"^https://services\\\\.gradle\\\\.org/distributions/(.+)$\"," +
+        "\"replacement\":\"https://mirror.example/gradle/$1\"," +
+        "\"requireChecksum\":true" +
+        "}]}";
 
     @TempDir
     Path temporaryDirectory;
@@ -78,6 +88,62 @@ class InstallTest {
 
         assertEquals(gradleHomeDir, homeDir);
         assertEquals(1, download.downloadCountFor(configuration.getDistribution()));
+    }
+
+    @Test
+    void downloadsDistributionFromConfiguredMirror() throws Exception {
+        File templateZip = temporaryDirectory.resolve("template-gradle.zip").toFile();
+        createTestZip(templateZip);
+        configureMirror(templateZip);
+        RecordingDownload download = new RecordingDownload((address, destination, attempt) -> {
+            assertEquals(MIRROR_DISTRIBUTION_URL, address);
+            copy(templateZip, destination);
+        });
+
+        File homeDir = newInstall(download).createDist(configuration);
+
+        assertEquals(gradleHomeDir, homeDir);
+        assertEquals(1, download.downloadCountFor(MIRROR_DISTRIBUTION_URL));
+        assertEquals(0, download.downloadCountFor(OFFICIAL_DISTRIBUTION_URL));
+    }
+
+    @Test
+    void fallsBackToOriginalUrlWhenMirrorDownloadFails() throws Exception {
+        File templateZip = temporaryDirectory.resolve("template-gradle.zip").toFile();
+        createTestZip(templateZip);
+        configureMirror(templateZip);
+        RecordingDownload download = new RecordingDownload((address, destination, attempt) -> {
+            if (address.equals(MIRROR_DISTRIBUTION_URL)) {
+                throw new IOException("mirror unavailable");
+            }
+            copy(templateZip, destination);
+        });
+
+        File homeDir = newInstall(download).createDist(configuration);
+
+        assertEquals(gradleHomeDir, homeDir);
+        assertEquals(1, download.downloadCountFor(MIRROR_DISTRIBUTION_URL));
+        assertEquals(1, download.downloadCountFor(OFFICIAL_DISTRIBUTION_URL));
+    }
+
+    @Test
+    void fallsBackToOriginalUrlWhenMirrorChecksumDoesNotMatch() throws Exception {
+        File templateZip = temporaryDirectory.resolve("template-gradle.zip").toFile();
+        createTestZip(templateZip);
+        configureMirror(templateZip);
+        RecordingDownload download = new RecordingDownload((address, destination, attempt) -> {
+            if (address.equals(MIRROR_DISTRIBUTION_URL)) {
+                writeBytes(destination, BAD_ARCHIVE_CONTENT);
+            } else {
+                copy(templateZip, destination);
+            }
+        });
+
+        File homeDir = newInstall(download).createDist(configuration);
+
+        assertEquals(gradleHomeDir, homeDir);
+        assertEquals(1, download.downloadCountFor(MIRROR_DISTRIBUTION_URL));
+        assertEquals(1, download.downloadCountFor(OFFICIAL_DISTRIBUTION_URL));
     }
 
     @Test
@@ -135,6 +201,12 @@ class InstallTest {
 
     private Install newInstall(IDownload download) {
         return new Install(new Logger(true), download, new FixedPathAssembler(distributionDir, zipDestination));
+    }
+
+    private void configureMirror(File templateZip) throws Exception {
+        configuration.setDistribution(OFFICIAL_DISTRIBUTION_URL);
+        configuration.setDistributionSha256Sum(Install.calculateSha256Sum(templateZip));
+        configuration.setMirrorConfiguration(MirrorConfiguration.parse(MIRROR_CONFIGURATION, "CN"));
     }
 
     private static void createTestZip(File zipDestination) throws Exception {
