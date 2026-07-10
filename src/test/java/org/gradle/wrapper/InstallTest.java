@@ -206,7 +206,7 @@ class InstallTest {
     private void configureMirror(File templateZip) throws Exception {
         configuration.setDistribution(OFFICIAL_DISTRIBUTION_URL);
         configuration.setDistributionSha256Sum(Install.calculateSha256Sum(templateZip));
-        configuration.setMirrorConfiguration(MirrorConfiguration.parse(MIRROR_CONFIGURATION, "CN"));
+        configuration.setMirrorConfiguration(MirrorConfiguration.parse(MIRROR_CONFIGURATION));
     }
 
     private static void createTestZip(File zipDestination) throws Exception {

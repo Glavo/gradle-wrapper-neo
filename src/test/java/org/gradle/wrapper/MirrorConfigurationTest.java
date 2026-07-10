@@ -35,7 +35,6 @@ class MirrorConfigurationTest {
     private static final String CONFIGURATION = "{" +
         "\"version\":1," +
         "\"mirrors\":[{" +
-        "\"regions\":[\"CN\"]," +
         "\"pattern\":\"^https://services\\\\.gradle\\\\.org/distributions/(.+)$\"," +
         "\"replacement\":\"https://mirror.example/gradle/$1\"" +
         "}]}";
@@ -45,7 +44,7 @@ class MirrorConfigurationTest {
 
     @Test
     void missingConfigurationDoesNotAddMirrors() {
-        MirrorConfiguration configuration = MirrorConfiguration.load(temporaryDirectory.toFile(), "CN");
+        MirrorConfiguration configuration = MirrorConfiguration.load(temporaryDirectory.toFile());
 
         assertEquals(Collections.singletonList(DISTRIBUTION_URL), configuration.resolve(DISTRIBUTION_URL, true));
     }
@@ -57,28 +56,25 @@ class MirrorConfigurationTest {
             CONFIGURATION.getBytes(StandardCharsets.UTF_8)
         );
 
-        MirrorConfiguration configuration = MirrorConfiguration.load(temporaryDirectory.toFile(), "cn");
+        MirrorConfiguration configuration = MirrorConfiguration.load(temporaryDirectory.toFile());
 
         assertEquals(Arrays.asList(MIRROR_URL, DISTRIBUTION_URL), configuration.resolve(DISTRIBUTION_URL, true));
     }
 
     @Test
-    void requiresMatchingRegionAndChecksumByDefault() {
-        MirrorConfiguration china = MirrorConfiguration.parse(CONFIGURATION, "CN");
-        MirrorConfiguration otherRegion = MirrorConfiguration.parse(CONFIGURATION, "US");
+    void requiresChecksumByDefault() {
+        MirrorConfiguration configuration = MirrorConfiguration.parse(CONFIGURATION);
 
-        assertEquals(Collections.singletonList(DISTRIBUTION_URL), china.resolve(DISTRIBUTION_URL, false));
-        assertEquals(Collections.singletonList(DISTRIBUTION_URL), otherRegion.resolve(DISTRIBUTION_URL, true));
+        assertEquals(Collections.singletonList(DISTRIBUTION_URL), configuration.resolve(DISTRIBUTION_URL, false));
     }
 
     @Test
-    void supportsExplicitMirrorWithoutRegionOrChecksumRequirement() {
+    void supportsExplicitMirrorWithoutChecksumRequirement() {
         MirrorConfiguration configuration = MirrorConfiguration.parse(
             "{\"version\":1,\"mirrors\":[{" +
                 "\"pattern\":\"^https://services\\\\.gradle\\\\.org/distributions/(.+)$\"," +
                 "\"replacement\":\"https://mirror.example/gradle/$1\"," +
-                "\"requireChecksum\":false}]}",
-            "US"
+                "\"requireChecksum\":false}]}"
         );
 
         assertEquals(Arrays.asList(MIRROR_URL, DISTRIBUTION_URL), configuration.resolve(DISTRIBUTION_URL, false));
@@ -88,13 +84,12 @@ class MirrorConfigurationTest {
     void rejectsUnknownFieldsAndNonHttpsResults() {
         assertThrows(
             IllegalArgumentException.class,
-            () -> MirrorConfiguration.parse("{\"version\":1,\"unknown\":true}", "CN")
+            () -> MirrorConfiguration.parse("{\"version\":1,\"unknown\":true}")
         );
 
         MirrorConfiguration configuration = MirrorConfiguration.parse(
             "{\"version\":1,\"mirrors\":[{" +
-                "\"pattern\":\"(.*)\",\"replacement\":\"http://mirror.example/$1\"}]}",
-            "CN"
+                "\"pattern\":\"(.*)\",\"replacement\":\"http://mirror.example/$1\"}]}"
         );
         IllegalArgumentException failure = assertThrows(
             IllegalArgumentException.class,
