@@ -23,9 +23,6 @@ import org.gradle.wrapper.neo.Bootstrap;
 import org.jspecify.annotations.NullMarked;
 
 import java.io.File;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -43,13 +40,12 @@ public class GradleWrapperMain {
             return;
         }
 
-        File wrapperJar = wrapperJar();
-        prepareWrapper(args, wrapperJar).execute();
+        prepareWrapper(args).execute();
     }
 
-    private static Action prepareWrapper(String[] args, File wrapperJar) throws Exception {
-        File propertiesFile = wrapperProperties(wrapperJar);
-        File rootDir = rootDir(wrapperJar);
+    private static Action prepareWrapper(String[] args) throws Exception {
+        File rootDir = wrapperRoot();
+        File propertiesFile = wrapperProperties();
 
         CommandLineParser parser = new CommandLineParser();
         parser.allowUnknownOptions();
@@ -112,59 +108,12 @@ public class GradleWrapperMain {
         return result;
     }
 
-    static File rootDir(File wrapperJar) {
-        return wrapperDir(wrapperJar).getParentFile().getParentFile();
+    static File wrapperRoot() {
+        return Bootstrap.wrapperRoot().toFile();
     }
 
-    static File wrapperProperties(File wrapperJar) {
-        return new File(wrapperDir(wrapperJar), "gradle-wrapper.properties");
-    }
-
-    static File wrapperDir(File wrapperJar) {
-        return wrapperDir(wrapperJar, new File(System.getProperty("user.dir")));
-    }
-
-    static File wrapperDir(File wrapperJar, File currentDirectory) {
-        File sourceWrapperDir = sourceWrapperDir(wrapperJar);
-        if (new File(sourceWrapperDir, "gradle-wrapper.properties").isFile()) {
-            return sourceWrapperDir;
-        }
-
-        for (File directory = currentDirectory.getAbsoluteFile(); directory != null; directory = directory.getParentFile()) {
-            File propertiesFile = WrapperExecutor.wrapperPropertiesForProjectDirectory(directory);
-            if (propertiesFile.isFile()) {
-                return propertiesFile.getParentFile();
-            }
-        }
-
-        throw new RuntimeException(
-            "Could not find gradle/wrapper/gradle-wrapper.properties searching from " + currentDirectory.getAbsolutePath() + "."
-        );
-    }
-
-    static File sourceWrapperDir(File wrapperJar) {
-        String configuredWrapperDir = System.getProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
-        if (configuredWrapperDir != null && !configuredWrapperDir.isEmpty()) {
-            return new File(configuredWrapperDir);
-        }
-        return wrapperJar.getParentFile();
-    }
-
-    private static File wrapperJar() {
-        URI location;
-        try {
-            location = GradleWrapperMain.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-        } catch (URISyntaxException e) {
-            throw new RuntimeException(e);
-        }
-        if (!location.getScheme().equals("file")) {
-            throw new RuntimeException(String.format("Cannot determine classpath for wrapper Jar from codebase '%s'.", location));
-        }
-        try {
-            return Paths.get(location).toFile();
-        } catch (NoClassDefFoundError e) {
-            return new File(location.getPath());
-        }
+    static File wrapperProperties() {
+        return WrapperExecutor.wrapperPropertiesForProjectDirectory(wrapperRoot());
     }
 
     private static File gradleUserHome(ParsedCommandLine options) {

@@ -18,8 +18,6 @@ package org.gradle.wrapper.neo;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -33,93 +31,86 @@ class BootstrapTest {
     Path temporaryDirectory;
 
     @Test
-    void readsWrapperDirectoryFromSystemProperty() {
-        Path wrapperDir = temporaryDirectory.resolve("custom-wrapper");
-        String originalValue = System.getProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
+    void readsExplicitPathsFromSystemProperties() {
+        Path wrapperRoot = temporaryDirectory.resolve("project");
+        Path sourceFile = temporaryDirectory.resolve("launcher/GradleWrapperNeo.java");
+        Path jarFile = wrapperRoot.resolve(".gradle/wrapper-neo/launcher/gradle-wrapper-neo.jar");
+        String originalWrapperRoot = System.getProperty(Bootstrap.WRAPPER_ROOT_PROPERTY);
+        String originalSourceFile = System.getProperty(Bootstrap.SOURCE_FILE_PROPERTY);
+        String originalJarFile = System.getProperty(Bootstrap.JAR_FILE_PROPERTY);
         try {
-            System.setProperty(Bootstrap.WRAPPER_DIR_PROPERTY, wrapperDir.toString());
-            assertEquals(wrapperDir, Bootstrap.wrapperDir());
+            System.setProperty(Bootstrap.WRAPPER_ROOT_PROPERTY, wrapperRoot.toString());
+            System.setProperty(Bootstrap.SOURCE_FILE_PROPERTY, sourceFile.toString());
+            System.setProperty(Bootstrap.JAR_FILE_PROPERTY, jarFile.toString());
+
+            assertEquals(wrapperRoot, Bootstrap.wrapperRoot());
+            assertEquals(sourceFile, Bootstrap.sourceFile());
+            assertEquals(jarFile, Bootstrap.jarFile());
         } finally {
-            restoreProperty(Bootstrap.WRAPPER_DIR_PROPERTY, originalValue);
+            restoreProperty(Bootstrap.WRAPPER_ROOT_PROPERTY, originalWrapperRoot);
+            restoreProperty(Bootstrap.SOURCE_FILE_PROPERTY, originalSourceFile);
+            restoreProperty(Bootstrap.JAR_FILE_PROPERTY, originalJarFile);
         }
     }
 
     @Test
-    void rejectsMissingWrapperDirectorySystemProperty() {
-        String originalValue = System.getProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
+    void rejectsMissingRequiredPath() {
+        String originalValue = System.getProperty(Bootstrap.WRAPPER_ROOT_PROPERTY);
         try {
-            System.clearProperty(Bootstrap.WRAPPER_DIR_PROPERTY);
+            System.clearProperty(Bootstrap.WRAPPER_ROOT_PROPERTY);
 
-            RuntimeException failure = assertThrows(RuntimeException.class, Bootstrap::wrapperDir);
+            RuntimeException failure = assertThrows(RuntimeException.class, Bootstrap::wrapperRoot);
 
-            assertEquals("Missing required system property: " + Bootstrap.WRAPPER_DIR_PROPERTY, failure.getMessage());
+            assertEquals("Missing required system property: " + Bootstrap.WRAPPER_ROOT_PROPERTY, failure.getMessage());
         } finally {
-            restoreProperty(Bootstrap.WRAPPER_DIR_PROPERTY, originalValue);
+            restoreProperty(Bootstrap.WRAPPER_ROOT_PROPERTY, originalValue);
         }
     }
 
     @Test
-    void derivesSourceAndJarFromLocalWrapperDirectory() throws IOException {
-        Path wrapperDir = temporaryDirectory.resolve("custom-wrapper");
-        Files.createDirectories(wrapperDir);
-        Files.createFile(wrapperDir.resolve("gradle-wrapper.properties"));
+    void rejectsRelativePath() {
+        String originalValue = System.getProperty(Bootstrap.SOURCE_FILE_PROPERTY);
+        try {
+            System.setProperty(Bootstrap.SOURCE_FILE_PROPERTY, "GradleWrapperNeo.java");
 
-        assertEquals(wrapperDir.resolve("GradleWrapperNeo.java"), Bootstrap.sourceFile(wrapperDir));
-        assertEquals(wrapperDir.resolve(".gradle-wrapper-neo/gradle-wrapper-neo.jar"), Bootstrap.targetJar(wrapperDir));
+            RuntimeException failure = assertThrows(RuntimeException.class, Bootstrap::sourceFile);
+
+            assertEquals(
+                "System property " + Bootstrap.SOURCE_FILE_PROPERTY + " must be an absolute path: GradleWrapperNeo.java",
+                failure.getMessage()
+            );
+        } finally {
+            restoreProperty(Bootstrap.SOURCE_FILE_PROPERTY, originalValue);
+        }
     }
 
     @Test
-    void usesProjectWrapperCacheWithGlobalSource() throws IOException {
-        Path sourceWrapperDir = temporaryDirectory.resolve("global/gradle/wrapper");
-        Path projectDir = temporaryDirectory.resolve("project");
-        Path projectWrapperDir = projectDir.resolve("gradle/wrapper");
-        Path currentDirectory = projectDir.resolve("nested/subproject");
-        Files.createDirectories(sourceWrapperDir);
-        Files.createDirectories(projectWrapperDir);
-        Files.createFile(projectWrapperDir.resolve("gradle-wrapper.properties"));
-
-        assertEquals(projectWrapperDir, Bootstrap.projectWrapperDir(sourceWrapperDir, currentDirectory));
-        assertEquals(
-            projectWrapperDir.resolve(".gradle-wrapper-neo/gradle-wrapper-neo-global.jar"),
-            Bootstrap.targetJar(sourceWrapperDir, currentDirectory)
-        );
-    }
-
-    @Test
-    void rejectsGlobalSourceOutsideAWrapperProject() {
-        Path sourceWrapperDir = temporaryDirectory.resolve("global/gradle/wrapper");
-        Path currentDirectory = temporaryDirectory.resolve("project/without-wrapper");
-
-        RuntimeException failure = assertThrows(
-            RuntimeException.class,
-            () -> Bootstrap.projectWrapperDir(sourceWrapperDir, currentDirectory)
-        );
-
-        assertEquals(
-            "Could not find gradle/wrapper/gradle-wrapper.properties searching from " + currentDirectory.toAbsolutePath() + ".",
-            failure.getMessage()
-        );
-    }
-
-    @Test
-    void forwardsWrapperDirectoryAndRemovesBootstrapOnlyProperties() {
-        Path wrapperDir = temporaryDirectory.resolve("custom-wrapper");
+    void forwardsExplicitPathsAndRemovesInternalProperties() {
+        Path wrapperRoot = temporaryDirectory.resolve("project");
+        Path sourceFile = temporaryDirectory.resolve("launcher/GradleWrapperNeo.java");
+        Path jarFile = wrapperRoot.resolve(".gradle/wrapper-neo/launcher/gradle-wrapper-neo.jar");
 
         List<String> result = Bootstrap.forwardedJvmArguments(
             Arrays.asList(
                 "-Xmx256m",
                 "-Duser.language=en",
                 "-Dgradle.wrapper.neo.bootstrap=true",
-                "-Dorg.gradle.wrapper.neo.wrapper-dir=/wrong"
+                "-Dorg.gradle.wrapper.neo.wrapper-root=/wrong",
+                "-Dorg.gradle.wrapper.neo.source-file=/wrong",
+                "-Dorg.gradle.wrapper.neo.jar-file=/wrong"
             ),
-            wrapperDir
+            wrapperRoot,
+            sourceFile,
+            jarFile
         );
 
         assertEquals(
             Arrays.asList(
                 "-Xmx256m",
                 "-Duser.language=en",
-                "-D" + Bootstrap.WRAPPER_DIR_PROPERTY + "=" + wrapperDir
+                "-D" + Bootstrap.WRAPPER_ROOT_PROPERTY + "=" + wrapperRoot,
+                "-D" + Bootstrap.SOURCE_FILE_PROPERTY + "=" + sourceFile,
+                "-D" + Bootstrap.JAR_FILE_PROPERTY + "=" + jarFile
             ),
             result
         );

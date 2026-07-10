@@ -205,18 +205,19 @@ DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 # Select the wrapper entry point. GradleWrapperNeo.java is compiled to a temporary
 # classes directory only for the first bootstrap; Java packages the final JAR.
 LAUNCHER_WRAPPER_DIR=$APP_HOME/gradle/wrapper
-PROJECT_WRAPPER_DIR=
+WRAPPER_ROOT=
 
 if [ -f "$LAUNCHER_WRAPPER_DIR/gradle-wrapper.properties" ] ; then
-    PROJECT_WRAPPER_DIR=$LAUNCHER_WRAPPER_DIR
+    WRAPPER_ROOT=$APP_HOME
 else
-    NEO_SEARCH_DIR=$( pwd -P )
-    while [ -z "$PROJECT_WRAPPER_DIR" ] ; do
+    NEO_SEARCH_START=$( pwd -P )
+    NEO_SEARCH_DIR=$NEO_SEARCH_START
+    while [ -z "$WRAPPER_ROOT" ] ; do
         NEO_CANDIDATE_WRAPPER_DIR=$NEO_SEARCH_DIR/gradle/wrapper
         if [ -f "$NEO_CANDIDATE_WRAPPER_DIR/gradle-wrapper.properties" ] ; then
-            PROJECT_WRAPPER_DIR=$NEO_CANDIDATE_WRAPPER_DIR
+            WRAPPER_ROOT=$NEO_SEARCH_DIR
         elif [ "$NEO_SEARCH_DIR" = / ] ; then
-            die "ERROR: Could not find gradle/wrapper/gradle-wrapper.properties searching from $( pwd -P )."
+            die "ERROR: Could not find gradle/wrapper/gradle-wrapper.properties searching from $NEO_SEARCH_START."
         else
             NEO_SEARCH_DIR=${NEO_SEARCH_DIR%/*}
             if [ -z "$NEO_SEARCH_DIR" ] ; then
@@ -226,28 +227,39 @@ else
     done
 fi
 
-if [ -f "$PROJECT_WRAPPER_DIR/GradleWrapperNeo.java" ] ; then
-    WRAPPER_DIR=$PROJECT_WRAPPER_DIR
+PROJECT_NEO_SOURCE=$WRAPPER_ROOT/gradle/wrapper/GradleWrapperNeo.java
+if [ -f "$PROJECT_NEO_SOURCE" ] ; then
+    NEO_SOURCE=$PROJECT_NEO_SOURCE
+    NEO_CACHE_SLOT=project
 else
-    WRAPPER_DIR=$LAUNCHER_WRAPPER_DIR
+    NEO_SOURCE=$LAUNCHER_WRAPPER_DIR/GradleWrapperNeo.java
+    NEO_CACHE_SLOT=launcher
 fi
 
-NEO_SOURCE=$WRAPPER_DIR/GradleWrapperNeo.java
-NEO_WORK_DIR=$PROJECT_WRAPPER_DIR/.gradle-wrapper-neo
-if [ -f "$WRAPPER_DIR/gradle-wrapper.properties" ] ; then
-    NEO_JAR=$NEO_WORK_DIR/gradle-wrapper-neo.jar
-else
-    NEO_JAR=$NEO_WORK_DIR/gradle-wrapper-neo-global.jar
-fi
+NEO_WORK_DIR=$WRAPPER_ROOT/.gradle/wrapper-neo/$NEO_CACHE_SLOT
+NEO_JAR=$NEO_WORK_DIR/gradle-wrapper-neo.jar
 NEO_BOOTSTRAP_DIR=$NEO_WORK_DIR/bootstrap/$$
 NEO_CLASSES_DIR=$NEO_BOOTSTRAP_DIR/classes
+
+NEO_JAVA_WRAPPER_ROOT=$WRAPPER_ROOT
+NEO_JAVA_SOURCE=$NEO_SOURCE
+NEO_JAVA_JAR=$NEO_JAR
+NEO_JAVA_CLASSES_DIR=$NEO_CLASSES_DIR
+if "$cygwin" || "$msys" ; then
+    NEO_JAVA_WRAPPER_ROOT=$( cygpath --mixed "$WRAPPER_ROOT" )
+    NEO_JAVA_SOURCE=$( cygpath --mixed "$NEO_SOURCE" )
+    NEO_JAVA_JAR=$( cygpath --mixed "$NEO_JAR" )
+    NEO_JAVA_CLASSES_DIR=$( cygpath --mixed "$NEO_CLASSES_DIR" )
+fi
 
 if [ -f "$NEO_SOURCE" ] ; then
     if [ -n "$NEO_JAR" ] && [ -f "$NEO_JAR" ] ; then
         set -- \
                 "-Dorg.gradle.appname=$APP_BASE_NAME" \
-                "-Dorg.gradle.wrapper.neo.wrapper-dir=$WRAPPER_DIR" \
-                -jar "$NEO_JAR" \
+                "-Dorg.gradle.wrapper.neo.wrapper-root=$NEO_JAVA_WRAPPER_ROOT" \
+                "-Dorg.gradle.wrapper.neo.source-file=$NEO_JAVA_SOURCE" \
+                "-Dorg.gradle.wrapper.neo.jar-file=$NEO_JAVA_JAR" \
+                -jar "$NEO_JAVA_JAR" \
                 "$@"
     else
         if [ -n "$JAVA_HOME" ] ; then
@@ -278,9 +290,11 @@ Please run this wrapper with a JDK so GradleWrapperNeo.java can be compiled."
 
         set -- \
                 "-Dorg.gradle.appname=$APP_BASE_NAME" \
-                "-Dorg.gradle.wrapper.neo.wrapper-dir=$WRAPPER_DIR" \
+                "-Dorg.gradle.wrapper.neo.wrapper-root=$NEO_JAVA_WRAPPER_ROOT" \
+                "-Dorg.gradle.wrapper.neo.source-file=$NEO_JAVA_SOURCE" \
+                "-Dorg.gradle.wrapper.neo.jar-file=$NEO_JAVA_JAR" \
                 "-Dgradle.wrapper.neo.bootstrap=true" \
-                -cp "$NEO_CLASSES_DIR" \
+                -cp "$NEO_JAVA_CLASSES_DIR" \
                 GradleWrapperNeo \
                 "$@"
     fi

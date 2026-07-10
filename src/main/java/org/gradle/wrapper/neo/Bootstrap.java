@@ -48,26 +48,34 @@ import javax.tools.ToolProvider;
 
 public final class Bootstrap {
     private static final String MAIN_CLASS_NAME = "GradleWrapperNeo";
-    private static final String JAR_FILE_NAME = "gradle-wrapper-neo.jar";
-    private static final String GLOBAL_JAR_FILE_NAME = "gradle-wrapper-neo-global.jar";
-    private static final String WORK_DIR_NAME = ".gradle-wrapper-neo";
+    private static final String TEMPORARY_JAR_PREFIX = "gradle-wrapper-neo-";
     private static final String CLASSES_DIR_NAME = "classes";
     private static final String LOCK_FILE_NAME = "lock";
-    private static final String SOURCE_FILE_NAME = MAIN_CLASS_NAME + ".java";
-    private static final String WRAPPER_PROPERTIES_FILE_NAME = "gradle-wrapper.properties";
     private static final String BOOTSTRAP_PROPERTY = "gradle.wrapper.neo.bootstrap";
-    public static final String WRAPPER_DIR_PROPERTY = "org.gradle.wrapper.neo.wrapper-dir";
+    public static final String WRAPPER_ROOT_PROPERTY = "org.gradle.wrapper.neo.wrapper-root";
+    public static final String SOURCE_FILE_PROPERTY = "org.gradle.wrapper.neo.source-file";
+    public static final String JAR_FILE_PROPERTY = "org.gradle.wrapper.neo.jar-file";
     private static final String MANIFEST_SOURCE_SHA256 = "Gradle-Wrapper-Neo-Source-SHA256";
 
     private Bootstrap() {
     }
 
     public static boolean handle(String[] args, Class<?> mainClass) throws Exception {
+        Path wrapperRoot = wrapperRoot();
+        Path sourceFile = sourceFile();
+        Path targetJar = jarFile();
+        if (!Files.isDirectory(wrapperRoot)) {
+            throw new RuntimeException("Wrapper root directory '" + wrapperRoot + "' does not exist.");
+        }
+        if (!Files.isRegularFile(sourceFile)) {
+            throw new RuntimeException("Wrapper source file '" + sourceFile + "' does not exist.");
+        }
+
         if (Boolean.getBoolean(BOOTSTRAP_PROPERTY)) {
-            Path wrapperDir = wrapperDir();
-            Path sourceFile = sourceFile(wrapperDir);
-            Path targetJar = targetJar(wrapperDir);
             Path stagingClassesDir = codeSource(mainClass);
+            if (!Files.isDirectory(stagingClassesDir)) {
+                throw new RuntimeException("Bootstrap classes directory '" + stagingClassesDir + "' does not exist.");
+            }
             int exitCode;
             try {
                 withLock(targetJar.getParent(), () -> {
@@ -79,7 +87,7 @@ public final class Bootstrap {
                     }
                     return null;
                 });
-                exitCode = launchJar(targetJar, wrapperDir, args);
+                exitCode = launchJar(targetJar, wrapperRoot, sourceFile, targetJar, args);
             } finally {
                 deleteRecursively(stagingClassesDir);
                 deleteIfEmpty(stagingClassesDir.getParent());
@@ -90,23 +98,18 @@ public final class Bootstrap {
 
         Path currentJar = codeSource(mainClass);
         if (!Files.isRegularFile(currentJar)) {
-            return false;
+            throw new RuntimeException("Cached wrapper JAR '" + currentJar + "' does not exist.");
         }
-        String currentJarName = currentJar.getFileName().toString();
-        if (!currentJarName.equals(JAR_FILE_NAME) && !currentJarName.equals(GLOBAL_JAR_FILE_NAME)) {
-            return false;
+        if (!isExpectedJar(currentJar, targetJar, sourceFile)) {
+            throw new RuntimeException("Running wrapper JAR '" + currentJar + "' does not match configured JAR '" + targetJar + "'.");
         }
-
-        Path wrapperDir = wrapperDir();
-        Path sourceFile = sourceFile(wrapperDir);
-        if (!Files.isRegularFile(sourceFile) || isCurrent(currentJar, sourceFile)) {
+        if (isCurrent(currentJar, sourceFile)) {
             return false;
         }
 
-        Path targetJar = targetJar(wrapperDir);
         Path classesDir = classesDir(targetJar);
         Files.createDirectories(targetJar.getParent());
-        Path nextJar = Files.createTempFile(targetJar.getParent(), "gradle-wrapper-neo-", ".jar");
+        Path nextJar = Files.createTempFile(targetJar.getParent(), TEMPORARY_JAR_PREFIX, ".jar");
         Path launchJar;
         try {
             launchJar = withLock(targetJar.getParent(), () -> {
@@ -123,7 +126,7 @@ public final class Bootstrap {
         }
         int exitCode;
         try {
-            exitCode = launchJar(launchJar, wrapperDir, args);
+            exitCode = launchJar(launchJar, wrapperRoot, sourceFile, targetJar, args);
         } finally {
             Files.deleteIfExists(nextJar);
         }
@@ -148,54 +151,28 @@ public final class Bootstrap {
         }
     }
 
-    private static String requireProperty(String name) {
+    private static Path requireAbsolutePath(String name) {
         String value = System.getProperty(name);
         if (value == null || value.isEmpty()) {
             throw new RuntimeException("Missing required system property: " + name);
         }
-        return value;
-    }
-
-    static Path wrapperDir() {
-        return Paths.get(requireProperty(WRAPPER_DIR_PROPERTY));
-    }
-
-    static Path sourceFile(Path wrapperDir) {
-        return wrapperDir.resolve(SOURCE_FILE_NAME);
-    }
-
-    static Path targetJar(Path sourceWrapperDir) {
-        return targetJar(sourceWrapperDir, Paths.get(System.getProperty("user.dir")));
-    }
-
-    static Path targetJar(Path sourceWrapperDir, Path currentDirectory) {
-        String jarFileName = Files.isRegularFile(sourceWrapperDir.resolve(WRAPPER_PROPERTIES_FILE_NAME))
-            ? JAR_FILE_NAME
-            : GLOBAL_JAR_FILE_NAME;
-        return projectWrapperDir(sourceWrapperDir, currentDirectory)
-            .resolve(WORK_DIR_NAME)
-            .resolve(jarFileName);
-    }
-
-    static Path projectWrapperDir(Path sourceWrapperDir) {
-        return projectWrapperDir(sourceWrapperDir, Paths.get(System.getProperty("user.dir")));
-    }
-
-    static Path projectWrapperDir(Path sourceWrapperDir, Path currentDirectory) {
-        if (Files.isRegularFile(sourceWrapperDir.resolve(WRAPPER_PROPERTIES_FILE_NAME))) {
-            return sourceWrapperDir;
+        Path path = Paths.get(value);
+        if (!path.isAbsolute()) {
+            throw new RuntimeException("System property " + name + " must be an absolute path: " + value);
         }
+        return path.normalize();
+    }
 
-        for (Path directory = currentDirectory.toAbsolutePath(); directory != null; directory = directory.getParent()) {
-            Path wrapperDir = directory.resolve("gradle").resolve("wrapper");
-            if (Files.isRegularFile(wrapperDir.resolve(WRAPPER_PROPERTIES_FILE_NAME))) {
-                return wrapperDir;
-            }
-        }
+    public static Path wrapperRoot() {
+        return requireAbsolutePath(WRAPPER_ROOT_PROPERTY);
+    }
 
-        throw new RuntimeException(
-            "Could not find gradle/wrapper/gradle-wrapper.properties searching from " + currentDirectory.toAbsolutePath() + "."
-        );
+    static Path sourceFile() {
+        return requireAbsolutePath(SOURCE_FILE_PROPERTY);
+    }
+
+    static Path jarFile() {
+        return requireAbsolutePath(JAR_FILE_PROPERTY);
     }
 
     private static Path classesDir(Path targetJar) {
@@ -210,6 +187,23 @@ public final class Bootstrap {
         ) {
             return action.execute();
         }
+    }
+
+    private static boolean isExpectedJar(Path currentJar, Path targetJar, Path sourceFile) throws Exception {
+        Path normalizedCurrentJar = currentJar.toAbsolutePath().normalize();
+        Path normalizedTargetJar = targetJar.toAbsolutePath().normalize();
+        if (normalizedCurrentJar.equals(normalizedTargetJar)) {
+            return true;
+        }
+
+        Path currentParent = normalizedCurrentJar.getParent();
+        Path targetParent = normalizedTargetJar.getParent();
+        String currentName = normalizedCurrentJar.getFileName().toString();
+        return currentParent != null
+            && currentParent.equals(targetParent)
+            && currentName.startsWith(TEMPORARY_JAR_PREFIX)
+            && currentName.endsWith(".jar")
+            && isCurrent(currentJar, sourceFile);
     }
 
     private static boolean isCurrent(Path jarFile, Path sourceFile) throws Exception {
@@ -326,32 +320,46 @@ public final class Bootstrap {
         }
     }
 
-    private static int launchJar(Path jarFile, Path wrapperDir, String[] args) throws Exception {
+    private static int launchJar(
+        Path launchJar,
+        Path wrapperRoot,
+        Path sourceFile,
+        Path targetJar,
+        String[] args
+    ) throws Exception {
         List<String> command = new ArrayList<>();
         command.add(javaExecutable());
-        command.addAll(forwardedJvmArguments(ManagementFactory.getRuntimeMXBean().getInputArguments(), wrapperDir));
+        command.addAll(forwardedJvmArguments(
+            ManagementFactory.getRuntimeMXBean().getInputArguments(),
+            wrapperRoot,
+            sourceFile,
+            targetJar
+        ));
         command.add("-jar");
-        command.add(jarFile.toString());
+        command.add(launchJar.toString());
         for (String arg : args) {
             command.add(arg);
         }
         return run(command);
     }
 
-    static List<String> forwardedJvmArguments(List<String> inputArguments, Path wrapperDir) {
+    static List<String> forwardedJvmArguments(
+        List<String> inputArguments,
+        Path wrapperRoot,
+        Path sourceFile,
+        Path jarFile
+    ) {
         List<String> result = new ArrayList<>();
         for (String inputArgument : inputArguments) {
-            if (!inputArgument.startsWith("-Dgradle.wrapper.neo.") && !isSystemPropertyArgument(inputArgument, WRAPPER_DIR_PROPERTY)) {
+            if (!inputArgument.startsWith("-Dgradle.wrapper.neo.")
+                && !inputArgument.startsWith("-Dorg.gradle.wrapper.neo.")) {
                 result.add(inputArgument);
             }
         }
-        result.add("-D" + WRAPPER_DIR_PROPERTY + "=" + wrapperDir);
+        result.add("-D" + WRAPPER_ROOT_PROPERTY + "=" + wrapperRoot);
+        result.add("-D" + SOURCE_FILE_PROPERTY + "=" + sourceFile);
+        result.add("-D" + JAR_FILE_PROPERTY + "=" + jarFile);
         return result;
-    }
-
-    private static boolean isSystemPropertyArgument(String inputArgument, String property) {
-        String option = "-D" + property;
-        return inputArgument.equals(option) || inputArgument.startsWith(option + "=");
     }
 
     private static String javaExecutable() {
