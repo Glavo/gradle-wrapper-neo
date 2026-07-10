@@ -32,22 +32,22 @@ class BootstrapTest {
 
     @Test
     void readsExplicitPathsFromSystemProperties() {
-        Path wrapperRoot = temporaryDirectory.resolve("project");
+        Path appHome = temporaryDirectory.resolve("project");
         Path sourceFile = temporaryDirectory.resolve("launcher/GradleWrapperNeo.java");
-        Path jarFile = wrapperRoot.resolve(".gradle/wrapper-neo/launcher/gradle-wrapper-neo.jar");
-        String originalWrapperRoot = System.getProperty(Bootstrap.WRAPPER_ROOT_PROPERTY);
+        Path jarFile = appHome.resolve(".gradle/wrapper-neo/launcher/gradle-wrapper-neo.jar");
+        String originalAppHome = System.getProperty(Bootstrap.APP_HOME_PROPERTY);
         String originalSourceFile = System.getProperty(Bootstrap.SOURCE_FILE_PROPERTY);
         String originalJarFile = System.getProperty(Bootstrap.JAR_FILE_PROPERTY);
         try {
-            System.setProperty(Bootstrap.WRAPPER_ROOT_PROPERTY, wrapperRoot.toString());
+            System.setProperty(Bootstrap.APP_HOME_PROPERTY, appHome.toString());
             System.setProperty(Bootstrap.SOURCE_FILE_PROPERTY, sourceFile.toString());
             System.setProperty(Bootstrap.JAR_FILE_PROPERTY, jarFile.toString());
 
-            assertEquals(wrapperRoot, Bootstrap.wrapperRoot());
+            assertEquals(appHome, Bootstrap.appHome());
             assertEquals(sourceFile, Bootstrap.sourceFile());
             assertEquals(jarFile, Bootstrap.jarFile());
         } finally {
-            restoreProperty(Bootstrap.WRAPPER_ROOT_PROPERTY, originalWrapperRoot);
+            restoreProperty(Bootstrap.APP_HOME_PROPERTY, originalAppHome);
             restoreProperty(Bootstrap.SOURCE_FILE_PROPERTY, originalSourceFile);
             restoreProperty(Bootstrap.JAR_FILE_PROPERTY, originalJarFile);
         }
@@ -55,15 +55,15 @@ class BootstrapTest {
 
     @Test
     void rejectsMissingRequiredPath() {
-        String originalValue = System.getProperty(Bootstrap.WRAPPER_ROOT_PROPERTY);
+        String originalValue = System.getProperty(Bootstrap.APP_HOME_PROPERTY);
         try {
-            System.clearProperty(Bootstrap.WRAPPER_ROOT_PROPERTY);
+            System.clearProperty(Bootstrap.APP_HOME_PROPERTY);
 
-            RuntimeException failure = assertThrows(RuntimeException.class, Bootstrap::wrapperRoot);
+            RuntimeException failure = assertThrows(RuntimeException.class, Bootstrap::appHome);
 
-            assertEquals("Missing required system property: " + Bootstrap.WRAPPER_ROOT_PROPERTY, failure.getMessage());
+            assertEquals("Missing required system property: " + Bootstrap.APP_HOME_PROPERTY, failure.getMessage());
         } finally {
-            restoreProperty(Bootstrap.WRAPPER_ROOT_PROPERTY, originalValue);
+            restoreProperty(Bootstrap.APP_HOME_PROPERTY, originalValue);
         }
     }
 
@@ -86,9 +86,9 @@ class BootstrapTest {
 
     @Test
     void forwardsExplicitPathsAndRemovesInternalProperties() {
-        Path wrapperRoot = temporaryDirectory.resolve("project");
+        Path appHome = temporaryDirectory.resolve("project");
         Path sourceFile = temporaryDirectory.resolve("launcher/GradleWrapperNeo.java");
-        Path jarFile = wrapperRoot.resolve(".gradle/wrapper-neo/launcher/gradle-wrapper-neo.jar");
+        Path jarFile = appHome.resolve(".gradle/wrapper-neo/launcher/gradle-wrapper-neo.jar");
 
         List<String> result = Bootstrap.forwardedJvmArguments(
             Arrays.asList(
@@ -96,11 +96,11 @@ class BootstrapTest {
                 "-Duser.language=en",
                 "-Dgradle.wrapper.neo.mirrors.0.enabled=false",
                 "-Dgradle.wrapper.neo.bootstrap=true",
-                "-Dorg.gradle.wrapper.neo.wrapper-root=/wrong",
+                "-Dorg.gradle.wrapper.neo.app-home=/wrong",
                 "-Dorg.gradle.wrapper.neo.source-file=/wrong",
                 "-Dorg.gradle.wrapper.neo.jar-file=/wrong"
             ),
-            wrapperRoot,
+            appHome,
             sourceFile,
             jarFile
         );
@@ -110,7 +110,7 @@ class BootstrapTest {
                 "-Xmx256m",
                 "-Duser.language=en",
                 "-Dgradle.wrapper.neo.mirrors.0.enabled=false",
-                "-D" + Bootstrap.WRAPPER_ROOT_PROPERTY + "=" + wrapperRoot,
+                "-D" + Bootstrap.APP_HOME_PROPERTY + "=" + appHome,
                 "-D" + Bootstrap.SOURCE_FILE_PROPERTY + "=" + sourceFile,
                 "-D" + Bootstrap.JAR_FILE_PROPERTY + "=" + jarFile
             ),

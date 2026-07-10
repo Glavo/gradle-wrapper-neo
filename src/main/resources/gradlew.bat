@@ -30,10 +30,10 @@ set DIRNAME=%~dp0
 if "%DIRNAME%"=="" set DIRNAME=.
 @rem This is normally unused
 set APP_BASE_NAME=%~n0
-set APP_HOME=%DIRNAME%
+set LAUNCHER_HOME=%DIRNAME%
 
-@rem Resolve any "." and ".." in APP_HOME to make it shorter.
-for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
+@rem Resolve any "." and ".." in LAUNCHER_HOME to make it shorter.
+for %%i in ("%LAUNCHER_HOME%") do set LAUNCHER_HOME=%%~fi
 
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
@@ -72,8 +72,8 @@ exit /b 1
 :execute
 @rem Setup the command line
 
-set "LAUNCHER_WRAPPER_DIR=%APP_HOME%\gradle\wrapper"
-set "WRAPPER_ROOT="
+set "LAUNCHER_WRAPPER_DIR=%LAUNCHER_HOME%\gradle\wrapper"
+set "APP_HOME="
 
 if exist "%LAUNCHER_WRAPPER_DIR%\gradle-wrapper.properties" goto localNeoWrapper
 
@@ -86,14 +86,14 @@ set "NEO_SEARCH_DIR=%NEO_PARENT_DIR%"
 goto findNeoProjectWrapper
 
 :foundNeoProjectWrapper
-set "WRAPPER_ROOT=%NEO_SEARCH_DIR%"
+set "APP_HOME=%NEO_SEARCH_DIR%"
 goto selectNeoSource
 
 :localNeoWrapper
-for %%d in ("%APP_HOME%\.") do set "WRAPPER_ROOT=%%~fd"
+for %%d in ("%LAUNCHER_HOME%\.") do set "APP_HOME=%%~fd"
 
 :selectNeoSource
-set "PROJECT_NEO_SOURCE=%WRAPPER_ROOT%\gradle\wrapper\GradleWrapperNeo.java"
+set "PROJECT_NEO_SOURCE=%APP_HOME%\gradle\wrapper\GradleWrapperNeo.java"
 if exist "%PROJECT_NEO_SOURCE%" goto useProjectNeoSource
 set "NEO_SOURCE=%LAUNCHER_WRAPPER_DIR%\GradleWrapperNeo.java"
 set "NEO_CACHE_SLOT=launcher"
@@ -104,12 +104,12 @@ set "NEO_SOURCE=%PROJECT_NEO_SOURCE%"
 set "NEO_CACHE_SLOT=project"
 
 :neoSourceSelected
-set "NEO_WORK_DIR=%WRAPPER_ROOT%\.gradle\wrapper-neo\%NEO_CACHE_SLOT%"
+set "NEO_WORK_DIR=%APP_HOME%\.gradle\wrapper-neo\%NEO_CACHE_SLOT%"
 set "NEO_JAR=%NEO_WORK_DIR%\gradle-wrapper-neo.jar"
 set "NEO_BOOTSTRAP_DIR=%NEO_WORK_DIR%\bootstrap\%RANDOM%-%RANDOM%"
 set "NEO_CLASSES_DIR=%NEO_BOOTSTRAP_DIR%\classes"
 
-set "NEO_JAVA_WRAPPER_ROOT=%WRAPPER_ROOT:\=/%"
+set "NEO_JAVA_APP_HOME=%APP_HOME:\=/%"
 set "NEO_JAVA_SOURCE=%NEO_SOURCE:\=/%"
 set "NEO_JAVA_JAR=%NEO_JAR:\=/%"
 set "NEO_JAVA_CLASSES_DIR=%NEO_CLASSES_DIR:\=/%"
@@ -164,12 +164,12 @@ exit /b 1
 
 :executeNeoBootstrap
 @rem Execute GradleWrapperNeo from temporary classes. Java packages the final JAR.
-endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.wrapper.neo.wrapper-root=%NEO_JAVA_WRAPPER_ROOT%" "-Dorg.gradle.wrapper.neo.source-file=%NEO_JAVA_SOURCE%" "-Dorg.gradle.wrapper.neo.jar-file=%NEO_JAVA_JAR%" "-Dgradle.wrapper.neo.bootstrap=true" -cp "%NEO_JAVA_CLASSES_DIR%" GradleWrapperNeo %* & call :exitWithErrorLevel
+endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.wrapper.neo.app-home=%NEO_JAVA_APP_HOME%" "-Dorg.gradle.wrapper.neo.source-file=%NEO_JAVA_SOURCE%" "-Dorg.gradle.wrapper.neo.jar-file=%NEO_JAVA_JAR%" "-Dgradle.wrapper.neo.bootstrap=true" -cp "%NEO_JAVA_CLASSES_DIR%" GradleWrapperNeo %* & call :exitWithErrorLevel
 goto :eof
 
 :executeNeoJar
 @rem Execute GradleWrapperNeo from the cached JAR.
-endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.wrapper.neo.wrapper-root=%NEO_JAVA_WRAPPER_ROOT%" "-Dorg.gradle.wrapper.neo.source-file=%NEO_JAVA_SOURCE%" "-Dorg.gradle.wrapper.neo.jar-file=%NEO_JAVA_JAR%" -jar "%NEO_JAVA_JAR%" %* & call :exitWithErrorLevel
+endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.wrapper.neo.app-home=%NEO_JAVA_APP_HOME%" "-Dorg.gradle.wrapper.neo.source-file=%NEO_JAVA_SOURCE%" "-Dorg.gradle.wrapper.neo.jar-file=%NEO_JAVA_JAR%" -jar "%NEO_JAVA_JAR%" %* & call :exitWithErrorLevel
 goto :eof
 
 :missingWrapperProperties

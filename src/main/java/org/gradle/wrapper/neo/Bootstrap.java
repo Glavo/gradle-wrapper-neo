@@ -52,7 +52,7 @@ public final class Bootstrap {
     private static final String CLASSES_DIR_NAME = "classes";
     private static final String LOCK_FILE_NAME = "lock";
     private static final String BOOTSTRAP_PROPERTY = "gradle.wrapper.neo.bootstrap";
-    public static final String WRAPPER_ROOT_PROPERTY = "org.gradle.wrapper.neo.wrapper-root";
+    public static final String APP_HOME_PROPERTY = "org.gradle.wrapper.neo.app-home";
     public static final String SOURCE_FILE_PROPERTY = "org.gradle.wrapper.neo.source-file";
     public static final String JAR_FILE_PROPERTY = "org.gradle.wrapper.neo.jar-file";
     private static final String MANIFEST_SOURCE_SHA256 = "Gradle-Wrapper-Neo-Source-SHA256";
@@ -61,11 +61,11 @@ public final class Bootstrap {
     }
 
     public static boolean handle(String[] args, Class<?> mainClass) throws Exception {
-        Path wrapperRoot = wrapperRoot();
+        Path appHome = appHome();
         Path sourceFile = sourceFile();
         Path targetJar = jarFile();
-        if (!Files.isDirectory(wrapperRoot)) {
-            throw new RuntimeException("Wrapper root directory '" + wrapperRoot + "' does not exist.");
+        if (!Files.isDirectory(appHome)) {
+            throw new RuntimeException("Application home directory '" + appHome + "' does not exist.");
         }
         if (!Files.isRegularFile(sourceFile)) {
             throw new RuntimeException("Wrapper source file '" + sourceFile + "' does not exist.");
@@ -87,7 +87,7 @@ public final class Bootstrap {
                     }
                     return null;
                 });
-                exitCode = launchJar(targetJar, wrapperRoot, sourceFile, targetJar, args);
+                exitCode = launchJar(targetJar, appHome, sourceFile, targetJar, args);
             } finally {
                 deleteRecursively(stagingClassesDir);
                 deleteIfEmpty(stagingClassesDir.getParent());
@@ -126,7 +126,7 @@ public final class Bootstrap {
         }
         int exitCode;
         try {
-            exitCode = launchJar(launchJar, wrapperRoot, sourceFile, targetJar, args);
+            exitCode = launchJar(launchJar, appHome, sourceFile, targetJar, args);
         } finally {
             Files.deleteIfExists(nextJar);
         }
@@ -163,8 +163,8 @@ public final class Bootstrap {
         return path.normalize();
     }
 
-    public static Path wrapperRoot() {
-        return requireAbsolutePath(WRAPPER_ROOT_PROPERTY);
+    public static Path appHome() {
+        return requireAbsolutePath(APP_HOME_PROPERTY);
     }
 
     static Path sourceFile() {
@@ -322,7 +322,7 @@ public final class Bootstrap {
 
     private static int launchJar(
         Path launchJar,
-        Path wrapperRoot,
+        Path appHome,
         Path sourceFile,
         Path targetJar,
         String[] args
@@ -331,7 +331,7 @@ public final class Bootstrap {
         command.add(javaExecutable());
         command.addAll(forwardedJvmArguments(
             ManagementFactory.getRuntimeMXBean().getInputArguments(),
-            wrapperRoot,
+            appHome,
             sourceFile,
             targetJar
         ));
@@ -345,7 +345,7 @@ public final class Bootstrap {
 
     static List<String> forwardedJvmArguments(
         List<String> inputArguments,
-        Path wrapperRoot,
+        Path appHome,
         Path sourceFile,
         Path jarFile
     ) {
@@ -356,7 +356,7 @@ public final class Bootstrap {
                 result.add(inputArgument);
             }
         }
-        result.add("-D" + WRAPPER_ROOT_PROPERTY + "=" + wrapperRoot);
+        result.add("-D" + APP_HOME_PROPERTY + "=" + appHome);
         result.add("-D" + SOURCE_FILE_PROPERTY + "=" + sourceFile);
         result.add("-D" + JAR_FILE_PROPERTY + "=" + jarFile);
         return result;

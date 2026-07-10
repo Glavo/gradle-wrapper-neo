@@ -44,7 +44,7 @@ public class GradleWrapperMain {
     }
 
     private static Action prepareWrapper(String[] args) throws Exception {
-        File rootDir = wrapperRoot();
+        File appHome = appHome();
         File propertiesFile = wrapperProperties();
 
         CommandLineParser parser = new CommandLineParser();
@@ -57,7 +57,7 @@ public class GradleWrapperMain {
         ParsedCommandLine options = parser.parse(args);
 
         Map<String, String> commandLineSystemProperties = converter.convert(options, new HashMap<String, String>());
-        Map<String, String> projectSystemProperties = PropertiesFileHandler.getSystemProperties(new File(rootDir, "gradle.properties"));
+        Map<String, String> projectSystemProperties = PropertiesFileHandler.getSystemProperties(new File(appHome, "gradle.properties"));
         // If the Gradle system properties may define a custom Gradle home, which needs to be set before loading user gradle.properties
         maybeAddGradleUserHomeSystemProperty(projectSystemProperties, commandLineSystemProperties);
         File gradleUserHome = gradleUserHome(options);
@@ -82,7 +82,7 @@ public class GradleWrapperMain {
         return () -> {
             wrapperExecutor.execute(
                 args,
-                new Install(logger, download, new PathAssembler(gradleUserHome, rootDir)),
+                new Install(logger, download, new PathAssembler(gradleUserHome, appHome)),
                 new BootstrapMainStarter());
         };
     }
@@ -107,12 +107,12 @@ public class GradleWrapperMain {
         return result;
     }
 
-    static File wrapperRoot() {
-        return Bootstrap.wrapperRoot().toFile();
+    static File appHome() {
+        return Bootstrap.appHome().toFile();
     }
 
     static File wrapperProperties() {
-        return WrapperExecutor.wrapperPropertiesForProjectDirectory(wrapperRoot());
+        return WrapperExecutor.wrapperPropertiesForProjectDirectory(appHome());
     }
 
     private static File gradleUserHome(ParsedCommandLine options) {

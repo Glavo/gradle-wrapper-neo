@@ -30,16 +30,16 @@ class GradleWrapperMainTest {
     Path temporaryDirectory;
 
     @Test
-    void resolvesWrapperContextFromExplicitRoot() {
-        File wrapperRoot = temporaryDirectory.resolve("project").toFile();
-        String originalValue = System.getProperty(Bootstrap.WRAPPER_ROOT_PROPERTY);
+    void resolvesWrapperContextFromExplicitAppHome() {
+        File appHome = temporaryDirectory.resolve("project").toFile();
+        String originalValue = System.getProperty(Bootstrap.APP_HOME_PROPERTY);
         try {
-            System.setProperty(Bootstrap.WRAPPER_ROOT_PROPERTY, wrapperRoot.getPath());
+            System.setProperty(Bootstrap.APP_HOME_PROPERTY, appHome.getPath());
 
-            assertEquals(wrapperRoot, GradleWrapperMain.wrapperRoot());
-            assertEquals(new File(wrapperRoot, "gradle/wrapper/gradle-wrapper.properties"), GradleWrapperMain.wrapperProperties());
+            assertEquals(appHome, GradleWrapperMain.appHome());
+            assertEquals(new File(appHome, "gradle/wrapper/gradle-wrapper.properties"), GradleWrapperMain.wrapperProperties());
         } finally {
-            restoreProperty(Bootstrap.WRAPPER_ROOT_PROPERTY, originalValue);
+            restoreProperty(Bootstrap.APP_HOME_PROPERTY, originalValue);
         }
     }
 
