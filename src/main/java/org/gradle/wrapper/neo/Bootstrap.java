@@ -351,7 +351,7 @@ public final class Bootstrap {
     ) {
         List<String> result = new ArrayList<>();
         for (String inputArgument : inputArguments) {
-            if (!inputArgument.startsWith("-Dgradle.wrapper.neo.")
+            if (!isSystemPropertyArgument(inputArgument, BOOTSTRAP_PROPERTY)
                 && !inputArgument.startsWith("-Dorg.gradle.wrapper.neo.")) {
                 result.add(inputArgument);
             }
@@ -360,6 +360,11 @@ public final class Bootstrap {
         result.add("-D" + SOURCE_FILE_PROPERTY + "=" + sourceFile);
         result.add("-D" + JAR_FILE_PROPERTY + "=" + jarFile);
         return result;
+    }
+
+    private static boolean isSystemPropertyArgument(String inputArgument, String property) {
+        String option = "-D" + property;
+        return inputArgument.equals(option) || inputArgument.startsWith(option + "=");
     }
 
     private static String javaExecutable() {

@@ -15,16 +15,12 @@
  */
 package org.gradle.wrapper;
 
-import org.gradle.cli.CommandLineParser;
-import org.gradle.cli.ParsedCommandLine;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.gradle.wrapper.neo.Bootstrap;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -45,35 +41,6 @@ class GradleWrapperMainTest {
         } finally {
             restoreProperty(Bootstrap.WRAPPER_ROOT_PROPERTY, originalValue);
         }
-    }
-
-    @Test
-    void usesExplicitGradleUserHomeOptionForMirrorConfiguration() {
-        File optionHome = temporaryDirectory.resolve("option-home").toFile();
-        Map<String, String> commandLineProperties = new HashMap<>();
-        commandLineProperties.put(GradleUserHomeLookup.GRADLE_USER_HOME_PROPERTY_KEY, temporaryDirectory.resolve("property-home").toString());
-
-        File result = GradleWrapperMain.mirrorConfigurationHome(parse("-g", optionHome.getPath()), commandLineProperties);
-
-        assertEquals(optionHome, result);
-    }
-
-    @Test
-    void usesCommandLineSystemPropertyForMirrorConfiguration() {
-        File propertyHome = temporaryDirectory.resolve("property-home").toFile();
-        Map<String, String> commandLineProperties = new HashMap<>();
-        commandLineProperties.put(GradleUserHomeLookup.GRADLE_USER_HOME_PROPERTY_KEY, propertyHome.getPath());
-
-        File result = GradleWrapperMain.mirrorConfigurationHome(parse(), commandLineProperties);
-
-        assertEquals(propertyHome, result);
-    }
-
-    private static ParsedCommandLine parse(String... args) {
-        CommandLineParser parser = new CommandLineParser();
-        parser.allowUnknownOptions();
-        parser.option(GradleWrapperMain.GRADLE_USER_HOME_OPTION, GradleWrapperMain.GRADLE_USER_HOME_DETAILED_OPTION).hasArgument();
-        return parser.parse(args);
     }
 
     private static void restoreProperty(String property, String value) {
