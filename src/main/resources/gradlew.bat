@@ -19,171 +19,32 @@
 @if "%DEBUG%"=="" @echo off
 @rem ##########################################################################
 @rem
-@rem  gradlew startup script for Windows
+@rem  gradlew forwarding script for Windows
 @rem
 @rem ##########################################################################
 
-@rem Set local scope for the variables, and ensure extensions are enabled
 setlocal EnableExtensions
 
-set DIRNAME=%~dp0
-if "%DIRNAME%"=="" set DIRNAME=.
-@rem This is normally unused
-set APP_BASE_NAME=%~n0
-set LAUNCHER_HOME=%DIRNAME%
+set "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+if exist "%POWERSHELL_EXE%" goto execute
 
-@rem Resolve any "." and ".." in LAUNCHER_HOME to make it shorter.
-for %%i in ("%LAUNCHER_HOME%") do set LAUNCHER_HOME=%%~fi
+set "POWERSHELL_EXE=powershell.exe"
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -Command "exit 0" >NUL 2>&1
+if %ERRORLEVEL% equ 0 goto execute
 
-@rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
-set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
-
-@rem Find java.exe
-if defined JAVA_HOME goto findJavaFromJavaHome
-
-set JAVA_EXE=java.exe
-%JAVA_EXE% -version >NUL 2>&1
+set "POWERSHELL_EXE=pwsh.exe"
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -Command "exit 0" >NUL 2>&1
 if %ERRORLEVEL% equ 0 goto execute
 
 echo. 1>&2
-echo ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH. 1>&2
+echo ERROR: PowerShell could not be found. 1>&2
 echo. 1>&2
-echo Please set the JAVA_HOME variable in your environment to match the 1>&2
-echo location of your Java installation. 1>&2
+echo Please install Windows PowerShell 5.1 or PowerShell 7 and make it available in PATH. 1>&2
 
-"%COMSPEC%" /c exit 1
-exit /b 1
-
-:findJavaFromJavaHome
-set JAVA_HOME=%JAVA_HOME:"=%
-set JAVA_EXE=%JAVA_HOME%/bin/java.exe
-
-if exist "%JAVA_EXE%" goto execute
-
-echo. 1>&2
-echo ERROR: JAVA_HOME is set to an invalid directory: %JAVA_HOME% 1>&2
-echo. 1>&2
-echo Please set the JAVA_HOME variable in your environment to match the 1>&2
-echo location of your Java installation. 1>&2
-
-"%COMSPEC%" /c exit 1
+endlocal
 exit /b 1
 
 :execute
-@rem Setup the command line
-
-set "LAUNCHER_WRAPPER_DIR=%LAUNCHER_HOME%\gradle\wrapper"
-set "APP_HOME="
-
-if exist "%LAUNCHER_WRAPPER_DIR%\gradle-wrapper.properties" goto localNeoWrapper
-
-set "NEO_SEARCH_DIR=%CD%"
-:findNeoProjectWrapper
-if exist "%NEO_SEARCH_DIR%\gradle\wrapper\gradle-wrapper.properties" goto foundNeoProjectWrapper
-for %%d in ("%NEO_SEARCH_DIR%\..") do set "NEO_PARENT_DIR=%%~fd"
-if /i "%NEO_PARENT_DIR%"=="%NEO_SEARCH_DIR%" goto missingWrapperProperties
-set "NEO_SEARCH_DIR=%NEO_PARENT_DIR%"
-goto findNeoProjectWrapper
-
-:foundNeoProjectWrapper
-set "APP_HOME=%NEO_SEARCH_DIR%"
-goto selectNeoSource
-
-:localNeoWrapper
-for %%d in ("%LAUNCHER_HOME%\.") do set "APP_HOME=%%~fd"
-
-:selectNeoSource
-set "PROJECT_NEO_SOURCE=%APP_HOME%\gradle\wrapper\GradleWrapperNeo.java"
-if exist "%PROJECT_NEO_SOURCE%" goto useProjectNeoSource
-set "NEO_SOURCE=%LAUNCHER_WRAPPER_DIR%\GradleWrapperNeo.java"
-goto neoSourceSelected
-
-:useProjectNeoSource
-set "NEO_SOURCE=%PROJECT_NEO_SOURCE%"
-
-:neoSourceSelected
-set "NEO_WORK_DIR=%APP_HOME%\.gradle\wrapper-neo"
-set "NEO_JAR=%NEO_WORK_DIR%\gradle-wrapper-neo.jar"
-set "NEO_BOOTSTRAP_DIR=%NEO_WORK_DIR%\bootstrap\%RANDOM%-%RANDOM%"
-set "NEO_CLASSES_DIR=%NEO_BOOTSTRAP_DIR%\classes"
-
-set "NEO_JAVA_APP_HOME=%APP_HOME:\=/%"
-set "NEO_JAVA_SOURCE=%NEO_SOURCE:\=/%"
-set "NEO_JAVA_JAR=%NEO_JAR:\=/%"
-set "NEO_JAVA_CLASSES_DIR=%NEO_CLASSES_DIR:\=/%"
-
-if not exist "%NEO_SOURCE%" goto missingNeoSource
-if exist "%NEO_JAR%" goto executeNeoJar
-
-if defined JAVA_HOME (
-    set JAVAC_EXE=%JAVA_HOME%\bin\javac.exe
-) else (
-    set JAVAC_EXE=javac.exe
-)
-
-"%JAVAC_EXE%" -version >NUL 2>&1
-if %ERRORLEVEL% equ 0 goto compileNeoSource
-
-echo. 1>&2
-echo ERROR: GradleWrapperNeo.java exists, but javac could not be found. 1>&2
-echo. 1>&2
-echo Please run this wrapper with a JDK so GradleWrapperNeo.java can be compiled. 1>&2
-
-"%COMSPEC%" /c exit 1
-exit /b 1
-
-:compileNeoSource
-if exist "%NEO_CLASSES_DIR%" rmdir /s /q "%NEO_CLASSES_DIR%" >NUL 2>&1
-mkdir "%NEO_CLASSES_DIR%" >NUL 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo. 1>&2
-    echo ERROR: Could not create temporary directory %NEO_CLASSES_DIR%. 1>&2
-    "%COMSPEC%" /c exit 1
-    exit /b 1
-)
-
-for /f "tokens=2 delims= " %%v in ('"%JAVAC_EXE%" -version 2^>^&1') do set JAVAC_VERSION=%%v
-echo %JAVAC_VERSION% | findstr /b "1." >NUL
-if %ERRORLEVEL% equ 0 (
-    set JAVAC_TARGET_ARGS=-source 8 -target 8
-) else (
-    set JAVAC_TARGET_ARGS=--release 8
-)
-
-"%JAVAC_EXE%" %JAVAC_TARGET_ARGS% -encoding UTF-8 -d "%NEO_CLASSES_DIR%" "%NEO_SOURCE%"
-if %ERRORLEVEL% equ 0 goto executeNeoBootstrap
-
-rmdir /s /q "%NEO_CLASSES_DIR%" >NUL 2>&1
-echo. 1>&2
-echo ERROR: Could not compile %NEO_SOURCE%. 1>&2
-
-"%COMSPEC%" /c exit 1
-exit /b 1
-
-:executeNeoBootstrap
-@rem Execute GradleWrapperNeo from temporary classes. Java packages the final JAR.
-endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.wrapper.neo.app-home=%NEO_JAVA_APP_HOME%" "-Dorg.gradle.wrapper.neo.source-file=%NEO_JAVA_SOURCE%" "-Dorg.gradle.wrapper.neo.jar-file=%NEO_JAVA_JAR%" "-Dgradle.wrapper.neo.bootstrap=true" -cp "%NEO_JAVA_CLASSES_DIR%" GradleWrapperNeo %* & call :exitWithErrorLevel
-goto :eof
-
-:executeNeoJar
-@rem Execute GradleWrapperNeo from the cached JAR.
-endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.wrapper.neo.app-home=%NEO_JAVA_APP_HOME%" "-Dorg.gradle.wrapper.neo.source-file=%NEO_JAVA_SOURCE%" "-Dorg.gradle.wrapper.neo.jar-file=%NEO_JAVA_JAR%" -jar "%NEO_JAVA_JAR%" %* & call :exitWithErrorLevel
-goto :eof
-
-:missingWrapperProperties
-echo. 1>&2
-echo ERROR: Could not find gradle/wrapper/gradle-wrapper.properties searching from "%CD%". 1>&2
-
-"%COMSPEC%" /c exit 1
-exit /b 1
-
-:missingNeoSource
-echo. 1>&2
-echo ERROR: %NEO_SOURCE% was not found. 1>&2
-
-"%COMSPEC%" /c exit 1
-exit /b 1
-
-:exitWithErrorLevel
-@rem Use "%COMSPEC%" /c exit to allow operators to work properly in scripts
-"%COMSPEC%" /c exit %ERRORLEVEL%
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0gradlew.ps1" %*
+set "EXIT_CODE=%ERRORLEVEL%"
+endlocal & exit /b %EXIT_CODE%
