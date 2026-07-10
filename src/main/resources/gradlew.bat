@@ -129,7 +129,7 @@ exit /b 1
 
 :executeNeoBootstrap
 @rem Execute GradleWrapperNeo from temporary classes. Java packages the final JAR.
-endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.wrapper.neo.wrapper-dir=%WRAPPER_DIR%" "-Dgradle.wrapper.neo.bootstrap=true" "-Dgradle.wrapper.neo.source=%NEO_SOURCE%" "-Dgradle.wrapper.neo.jar=%NEO_JAR%" -cp "%NEO_CLASSES_DIR%" GradleWrapperNeo %* & call :exitWithErrorLevel
+endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" "-Dorg.gradle.wrapper.neo.wrapper-dir=%WRAPPER_DIR%" "-Dgradle.wrapper.neo.bootstrap=true" -cp "%NEO_CLASSES_DIR%" GradleWrapperNeo %* & call :exitWithErrorLevel
 goto :eof
 
 :executeNeoJar

@@ -249,8 +249,6 @@ Please run this wrapper with a JDK, or provide $NEO_JAR."
                 "-Dorg.gradle.appname=$APP_BASE_NAME" \
                 "-Dorg.gradle.wrapper.neo.wrapper-dir=$WRAPPER_DIR" \
                 "-Dgradle.wrapper.neo.bootstrap=true" \
-                "-Dgradle.wrapper.neo.source=$NEO_SOURCE" \
-                "-Dgradle.wrapper.neo.jar=$NEO_JAR" \
                 -cp "$NEO_CLASSES_DIR" \
                 GradleWrapperNeo \
                 "$@"

@@ -54,8 +54,6 @@ public final class Bootstrap {
     private static final String LOCK_FILE_NAME = "lock";
     private static final String SOURCE_FILE_NAME = MAIN_CLASS_NAME + ".java";
     private static final String BOOTSTRAP_PROPERTY = "gradle.wrapper.neo.bootstrap";
-    private static final String SOURCE_PROPERTY = "gradle.wrapper.neo.source";
-    private static final String JAR_PROPERTY = "gradle.wrapper.neo.jar";
     public static final String WRAPPER_DIR_PROPERTY = "org.gradle.wrapper.neo.wrapper-dir";
     private static final String MANIFEST_SOURCE_SHA256 = "Gradle-Wrapper-Neo-Source-SHA256";
 
@@ -64,10 +62,10 @@ public final class Bootstrap {
 
     public static boolean handle(String[] args, Class<?> mainClass) throws Exception {
         if (Boolean.getBoolean(BOOTSTRAP_PROPERTY)) {
-            Path sourceFile = Paths.get(requireProperty(SOURCE_PROPERTY));
-            Path targetJar = Paths.get(requireProperty(JAR_PROPERTY));
-            Path stagingClassesDir = codeSource(mainClass);
             Path wrapperDir = wrapperDir();
+            Path sourceFile = sourceFile(wrapperDir);
+            Path targetJar = targetJar(wrapperDir);
+            Path stagingClassesDir = codeSource(mainClass);
             int exitCode;
             try {
                 withLock(wrapperDir, () -> {
@@ -94,7 +92,7 @@ public final class Bootstrap {
         }
 
         Path wrapperDir = wrapperDir();
-        Path sourceFile = wrapperDir.resolve(SOURCE_FILE_NAME);
+        Path sourceFile = sourceFile(wrapperDir);
         if (!Files.isRegularFile(sourceFile) || isCurrent(currentJar, sourceFile)) {
             return false;
         }
@@ -154,6 +152,14 @@ public final class Bootstrap {
 
     static Path wrapperDir() {
         return Paths.get(requireProperty(WRAPPER_DIR_PROPERTY));
+    }
+
+    static Path sourceFile(Path wrapperDir) {
+        return wrapperDir.resolve(SOURCE_FILE_NAME);
+    }
+
+    static Path targetJar(Path wrapperDir) {
+        return workDir(wrapperDir).resolve(JAR_FILE_NAME);
     }
 
     private static Path classesDir(Path wrapperDir) {

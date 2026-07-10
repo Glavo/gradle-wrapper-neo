@@ -57,6 +57,14 @@ class BootstrapTest {
     }
 
     @Test
+    void derivesSourceAndJarFromWrapperDirectory() {
+        Path wrapperDir = temporaryDirectory.resolve("custom-wrapper");
+
+        assertEquals(wrapperDir.resolve("GradleWrapperNeo.java"), Bootstrap.sourceFile(wrapperDir));
+        assertEquals(wrapperDir.resolve(".gradle-wrapper-neo/gradle-wrapper-neo.jar"), Bootstrap.targetJar(wrapperDir));
+    }
+
+    @Test
     void forwardsWrapperDirectoryAndRemovesBootstrapOnlyProperties() {
         Path wrapperDir = temporaryDirectory.resolve("custom-wrapper");
 
@@ -65,8 +73,6 @@ class BootstrapTest {
                 "-Xmx256m",
                 "-Duser.language=en",
                 "-Dgradle.wrapper.neo.bootstrap=true",
-                "-Dgradle.wrapper.neo.source=/source",
-                "-Dgradle.wrapper.neo.jar=/jar",
                 "-Dorg.gradle.wrapper.neo.wrapper-dir=/wrong"
             ),
             wrapperDir
