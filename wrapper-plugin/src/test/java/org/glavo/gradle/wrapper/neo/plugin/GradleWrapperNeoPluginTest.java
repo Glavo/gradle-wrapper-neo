@@ -91,7 +91,12 @@ class GradleWrapperNeoPluginTest {
         assertCrlfOnly(batchScript);
         assertLfOnly(powerShellScript);
         assertLfOnly(sourceFile);
-        assertTrue(new String(Files.readAllBytes(sourceFile), StandardCharsets.UTF_8).contains("public class GradleWrapperNeo"));
+        String sourceContent = new String(Files.readAllBytes(sourceFile), StandardCharsets.UTF_8);
+        assertTrue(sourceContent.contains("Gradle Wrapper Neo single-file source distribution."));
+        assertTrue(sourceContent.contains("File version: 1.0-SNAPSHOT"));
+        assertTrue(sourceContent.contains("Project: https://github.com/Glavo/gradle-wrapper-neo"));
+        assertTrue(sourceContent.contains("Place this file at gradle/wrapper/GradleWrapperNeo.java"));
+        assertTrue(sourceContent.contains("public class GradleWrapperNeo"));
 
         Properties properties = new Properties();
         try (InputStream input = Files.newInputStream(propertiesFile)) {

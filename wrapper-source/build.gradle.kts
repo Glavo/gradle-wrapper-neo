@@ -18,6 +18,8 @@ tasks.test {
 
 val generateGradleWrapperNeo = tasks.register<GenerateSingleJavaWrapperTask>("generateGradleWrapperNeo") {
     sourceDirectory.set(layout.projectDirectory.dir("src/main/java"))
+    wrapperVersion.set(project.version.toString())
+    projectUrl.set("https://github.com/Glavo/gradle-wrapper-neo")
     outputFile.set(layout.buildDirectory.file("bundle/GradleWrapperNeo.java"))
 }
 
