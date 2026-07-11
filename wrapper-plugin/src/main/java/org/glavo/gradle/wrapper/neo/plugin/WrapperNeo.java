@@ -29,6 +29,7 @@ import org.gradle.api.tasks.options.Option;
 import org.gradle.util.GradleVersion;
 
 import javax.inject.Inject;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -43,6 +44,10 @@ import java.util.Set;
 public abstract class WrapperNeo extends DefaultTask {
     private static final String BUNDLE_RESOURCE_PREFIX = "/org/glavo/gradle/wrapper/neo/plugin/bundle/";
 
+    private final File scriptFile;
+    private final File batchScriptFile;
+    private final File powerShellScriptFile;
+
     public enum DistributionType {
         BIN,
         ALL
@@ -55,7 +60,14 @@ public abstract class WrapperNeo extends DefaultTask {
 
     @Inject
     public WrapperNeo(ProjectLayout layout) {
+        scriptFile = layout.getProjectDirectory().file("gradlew").getAsFile();
+        batchScriptFile = layout.getProjectDirectory().file("gradlew.bat").getAsFile();
+        powerShellScriptFile = layout.getProjectDirectory().file("gradlew.ps1").getAsFile();
+
         getOutputs().upToDateWhen(ignored -> false);
+        getOutputs().file(scriptFile);
+        getOutputs().file(batchScriptFile);
+        getOutputs().file(powerShellScriptFile);
         getGradleVersion().convention(GradleVersion.current().getVersion());
         getDistributionType().convention(DistributionType.BIN);
         getDistributionBase().convention(PathBase.GRADLE_USER_HOME);
@@ -68,9 +80,6 @@ public abstract class WrapperNeo extends DefaultTask {
         getValidateDistributionUrl().convention(true);
         getRemoveLegacyWrapperJar().convention(true);
 
-        getScriptFile().convention(layout.getProjectDirectory().file("gradlew"));
-        getBatchScriptFile().convention(layout.getProjectDirectory().file("gradlew.bat"));
-        getPowerShellScriptFile().convention(layout.getProjectDirectory().file("gradlew.ps1"));
         getSourceFile().convention(layout.getProjectDirectory().file("gradle/wrapper/GradleWrapperNeo.java"));
         getPropertiesFile().convention(layout.getProjectDirectory().file("gradle/wrapper/gradle-wrapper.properties"));
         getLegacyWrapperJar().convention(layout.getProjectDirectory().file("gradle/wrapper/gradle-wrapper.jar"));
@@ -118,15 +127,6 @@ public abstract class WrapperNeo extends DefaultTask {
     public abstract Property<Boolean> getRemoveLegacyWrapperJar();
 
     @OutputFile
-    public abstract RegularFileProperty getScriptFile();
-
-    @OutputFile
-    public abstract RegularFileProperty getBatchScriptFile();
-
-    @OutputFile
-    public abstract RegularFileProperty getPowerShellScriptFile();
-
-    @OutputFile
     public abstract RegularFileProperty getSourceFile();
 
     @OutputFile
@@ -168,10 +168,10 @@ public abstract class WrapperNeo extends DefaultTask {
     public void generate() throws IOException {
         validateConfiguration();
 
-        writeBundledFile("gradlew", getScriptFile().get().getAsFile().toPath(), LineEndings.LF);
-        setExecutable(getScriptFile().get().getAsFile().toPath());
-        writeBundledFile("gradlew.bat", getBatchScriptFile().get().getAsFile().toPath(), LineEndings.CRLF);
-        writeBundledFile("gradlew.ps1", getPowerShellScriptFile().get().getAsFile().toPath(), LineEndings.LF);
+        writeBundledFile("gradlew", scriptFile.toPath(), LineEndings.LF);
+        setExecutable(scriptFile.toPath());
+        writeBundledFile("gradlew.bat", batchScriptFile.toPath(), LineEndings.CRLF);
+        writeBundledFile("gradlew.ps1", powerShellScriptFile.toPath(), LineEndings.LF);
         writeBundledFile("GradleWrapperNeo.java", getSourceFile().get().getAsFile().toPath(), LineEndings.LF);
         writeIfChanged(getPropertiesFile().get().getAsFile().toPath(), propertiesFileContent().getBytes(StandardCharsets.ISO_8859_1));
 
