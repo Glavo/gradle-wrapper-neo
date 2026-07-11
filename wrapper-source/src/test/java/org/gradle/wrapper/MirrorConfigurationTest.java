@@ -16,12 +16,15 @@
 package org.gradle.wrapper;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -30,99 +33,121 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MirrorConfigurationTest {
     private static final URI DISTRIBUTION_URL = URI.create("https://services.gradle.org/distributions/gradle-9.6.1-bin.zip");
     private static final URI MIRROR_URL = URI.create("https://mirror.example/gradle/gradle-9.6.1-bin.zip");
-    private static final String MIRROR_0 = MirrorConfiguration.PROPERTY_PREFIX + "0.";
+    private static final String CONFIGURATION = "{" +
+        "\"version\":1," +
+        "\"mirrors\":[{" +
+        "\"pattern\":\"^https://services\\\\.gradle\\\\.org/distributions/(.+)$\"," +
+        "\"replacement\":\"https://mirror.example/gradle/$1\"" +
+        "}]}";
+
+    @TempDir
+    Path temporaryDirectory;
 
     @Test
     void missingConfigurationDoesNotAddMirrors() {
-        MirrorConfiguration configuration = MirrorConfiguration.fromSystemProperties(Collections.emptyMap());
+        MirrorConfiguration configuration = MirrorConfiguration.load(temporaryDirectory.toFile());
 
         assertEquals(Collections.singletonList(DISTRIBUTION_URL), configuration.resolve(DISTRIBUTION_URL, true));
     }
 
     @Test
-    void loadsMatchingMirrorFromSystemProperties() {
-        MirrorConfiguration configuration = MirrorConfiguration.fromSystemProperties(
-            mirrorProperties("0", "https://mirror.example/gradle/$1")
+    void loadsMatchingMirrorFromGradleUserHome() throws Exception {
+        Files.write(
+            temporaryDirectory.resolve(MirrorConfiguration.FILE_NAME),
+            CONFIGURATION.getBytes(StandardCharsets.UTF_8)
         );
+
+        MirrorConfiguration configuration = MirrorConfiguration.load(temporaryDirectory.toFile());
 
         assertEquals(Arrays.asList(MIRROR_URL, DISTRIBUTION_URL), configuration.resolve(DISTRIBUTION_URL, true));
     }
 
     @Test
-    void requiresChecksumByDefault() {
-        MirrorConfiguration configuration = MirrorConfiguration.fromSystemProperties(
-            mirrorProperties("0", "https://mirror.example/gradle/$1")
+    void resolvesConfigurationFileLocation() {
+        File gradleUserHome = temporaryDirectory.resolve("gradle-home").toFile();
+        File configuredFile = temporaryDirectory.resolve("custom/config.json").toAbsolutePath().toFile();
+
+        assertEquals(
+            new File(gradleUserHome, MirrorConfiguration.FILE_NAME),
+            MirrorConfiguration.configurationFile(gradleUserHome, null)
         );
+        assertEquals(configuredFile, MirrorConfiguration.configurationFile(gradleUserHome, configuredFile.getPath()));
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> MirrorConfiguration.configurationFile(gradleUserHome, "")
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> MirrorConfiguration.configurationFile(gradleUserHome, "relative/config.json")
+        );
+    }
+
+    @Test
+    void requiresChecksumByDefault() {
+        MirrorConfiguration configuration = MirrorConfiguration.parse(CONFIGURATION);
 
         assertEquals(Collections.singletonList(DISTRIBUTION_URL), configuration.resolve(DISTRIBUTION_URL, false));
     }
 
     @Test
     void supportsExplicitMirrorWithoutChecksumRequirement() {
-        Map<String, String> properties = mirrorProperties("0", "https://mirror.example/gradle/$1");
-        properties.put(MIRROR_0 + "requireChecksum", "false");
-
-        MirrorConfiguration configuration = MirrorConfiguration.fromSystemProperties(properties);
+        MirrorConfiguration configuration = MirrorConfiguration.parse(
+            "{\"version\":1,\"mirrors\":[{" +
+                "\"pattern\":\"^https://services\\\\.gradle\\\\.org/distributions/(.+)$\"," +
+                "\"replacement\":\"https://mirror.example/gradle/$1\"," +
+                "\"requireChecksum\":false}]}"
+        );
 
         assertEquals(Arrays.asList(MIRROR_URL, DISTRIBUTION_URL), configuration.resolve(DISTRIBUTION_URL, false));
     }
 
     @Test
-    void sortsSparseMirrorIndicesNumerically() {
-        Map<String, String> properties = mirrorProperties("10", "https://ten.example/gradle/$1");
-        properties.putAll(mirrorProperties("2", "https://two.example/gradle/$1"));
-
-        MirrorConfiguration configuration = MirrorConfiguration.fromSystemProperties(properties);
-
-        assertEquals(
-            Arrays.asList(
-                URI.create("https://two.example/gradle/gradle-9.6.1-bin.zip"),
-                URI.create("https://ten.example/gradle/gradle-9.6.1-bin.zip"),
-                DISTRIBUTION_URL
-            ),
-            configuration.resolve(DISTRIBUTION_URL, true)
-        );
-    }
-
-    @Test
-    void supportsDisablingAnInheritedMirror() {
-        MirrorConfiguration configuration = MirrorConfiguration.fromSystemProperties(
-            Collections.singletonMap(MIRROR_0 + "enabled", "false")
+    void supportsDisabledMirrors() {
+        MirrorConfiguration configuration = MirrorConfiguration.parse(
+            "{\"version\":1,\"mirrors\":[{\"enabled\":false}]}"
         );
 
         assertEquals(Collections.singletonList(DISTRIBUTION_URL), configuration.resolve(DISTRIBUTION_URL, true));
     }
 
     @Test
-    void rejectsInvalidPropertyNamesAndValues() {
+    void rejectsInvalidConfiguration() {
         assertThrows(
             IllegalArgumentException.class,
-            () -> MirrorConfiguration.fromSystemProperties(
-                Collections.singletonMap(MirrorConfiguration.PROPERTY_PREFIX + "01.pattern", ".*")
+            () -> MirrorConfiguration.parse("{\"version\":1,\"unknown\":true}")
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> MirrorConfiguration.parse("{\"version\":2}")
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> MirrorConfiguration.parse("{\"version\":1,\"mirrors\":[{}]}")
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> MirrorConfiguration.parse(
+                "{\"version\":1,\"mirrors\":[{" +
+                    "\"pattern\":\"[\"," +
+                    "\"replacement\":\"https://mirror.example/gradle/$1\"}]}"
             )
         );
         assertThrows(
             IllegalArgumentException.class,
-            () -> MirrorConfiguration.fromSystemProperties(
-                Collections.singletonMap(MIRROR_0 + "unknown", "value")
+            () -> MirrorConfiguration.parse(
+                "{\"version\":1,\"mirrors\":[{" +
+                    "\"pattern\":\".*\"," +
+                    "\"replacement\":\"https://mirror.example/gradle/$1\"," +
+                    "\"requireChecksum\":\"true\"}]}"
             )
         );
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> MirrorConfiguration.fromSystemProperties(
-                Collections.singletonMap(MIRROR_0 + "pattern", ".*")
-            )
-        );
-
-        Map<String, String> properties = mirrorProperties("0", "https://mirror.example/gradle/$1");
-        properties.put(MIRROR_0 + "enabled", "yes");
-        assertThrows(IllegalArgumentException.class, () -> MirrorConfiguration.fromSystemProperties(properties));
     }
 
     @Test
     void rejectsNonHttpsResults() {
-        MirrorConfiguration configuration = MirrorConfiguration.fromSystemProperties(
-            mirrorProperties("0", "http://mirror.example/gradle/$1")
+        MirrorConfiguration configuration = MirrorConfiguration.parse(
+            "{\"version\":1,\"mirrors\":[{" +
+                "\"pattern\":\"(.*)\",\"replacement\":\"http://mirror.example/$1\"}]}"
         );
 
         IllegalArgumentException failure = assertThrows(
@@ -130,13 +155,5 @@ class MirrorConfigurationTest {
             () -> configuration.resolve(DISTRIBUTION_URL, true)
         );
         assertTrue(failure.getMessage().contains("absolute HTTPS URI"));
-    }
-
-    private static Map<String, String> mirrorProperties(String index, String replacement) {
-        String prefix = MirrorConfiguration.PROPERTY_PREFIX + index + ".";
-        Map<String, String> properties = new HashMap<>();
-        properties.put(prefix + "pattern", "^https://services[.]gradle[.]org/distributions/(.+)$");
-        properties.put(prefix + "replacement", replacement);
-        return properties;
     }
 }

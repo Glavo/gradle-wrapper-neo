@@ -76,7 +76,7 @@ public class GradleWrapperMain {
 
         WrapperExecutor wrapperExecutor = WrapperExecutor.forWrapperPropertiesFile(propertiesFile);
         WrapperConfiguration configuration = wrapperExecutor.getConfiguration();
-        configuration.setMirrorConfiguration(MirrorConfiguration.fromSystemProperties(System.getProperties()));
+        configuration.setMirrorConfiguration(MirrorConfiguration.load(gradleUserHome));
         IDownload download = new Download(logger, "gradlew", UNKNOWN_VERSION, configuration.getNetworkTimeout());
 
         return () -> {

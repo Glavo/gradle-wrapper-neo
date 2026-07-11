@@ -35,16 +35,12 @@ class PropertiesFileHandlerTest {
         Files.writeString(propertiesFile, """
             a=b
             systemProp.c=d
-            systemProp.gradle.wrapper.neo.mirrors.0.pattern=^https://services[.]gradle[.]org/distributions/(.+)$
             systemProp.=e
             systemProp=f
             """);
 
         assertEquals(
-            Map.of(
-                "c", "d",
-                "gradle.wrapper.neo.mirrors.0.pattern", "^https://services[.]gradle[.]org/distributions/(.+)$"
-            ),
+            Map.of("c", "d"),
             PropertiesFileHandler.getSystemProperties(propertiesFile.toFile())
         );
     }

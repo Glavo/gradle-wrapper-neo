@@ -15,7 +15,12 @@
  */
 package org.gradle.wrapper;
 
+import java.io.File;
+import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -23,14 +28,15 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 final class MirrorConfiguration {
-    static final String PROPERTY_PREFIX = "gradle.wrapper.neo.mirrors.";
-    private static final Pattern INDEX_PATTERN = Pattern.compile("0|[1-9][0-9]*");
+    static final String FILE_NAME = "gradle-wrapper-neo.json";
+    static final String CONFIGURATION_ENV = "GRADLE_WRAPPER_NEO_CONFIG";
+    private static final int MAX_FILE_SIZE = 1024 * 1024;
+    private static final Set<String> ROOT_FIELDS = fields("version", "mirrors");
     private static final Set<String> MIRROR_FIELDS = fields("enabled", "pattern", "replacement", "requireChecksum");
 
     private final List<Mirror> mirrors;
@@ -43,49 +49,67 @@ final class MirrorConfiguration {
         return new MirrorConfiguration(Collections.emptyList());
     }
 
-    static MirrorConfiguration fromSystemProperties(Map<?, ?> systemProperties) {
-        Map<Integer, Map<String, String>> configuredMirrors = new TreeMap<>();
-        for (Map.Entry<?, ?> entry : systemProperties.entrySet()) {
-            String propertyName = String.valueOf(entry.getKey());
-            if (!propertyName.startsWith(PROPERTY_PREFIX)) {
-                continue;
-            }
+    static MirrorConfiguration load(File gradleUserHome) {
+        File file = configurationFile(gradleUserHome, System.getenv(CONFIGURATION_ENV));
+        return loadFile(file);
+    }
 
-            String suffix = propertyName.substring(PROPERTY_PREFIX.length());
-            int separator = suffix.indexOf('.');
-            if (separator <= 0 || separator == suffix.length() - 1) {
-                throw invalidPropertyName(propertyName);
-            }
+    static File configurationFile(File gradleUserHome, String configuredPath) {
+        if (configuredPath == null) {
+            return new File(gradleUserHome, FILE_NAME);
+        }
+        if (configuredPath.isEmpty()) {
+            throw new IllegalArgumentException("Environment variable " + CONFIGURATION_ENV + " must not be empty.");
+        }
 
-            String indexText = suffix.substring(0, separator);
-            if (!INDEX_PATTERN.matcher(indexText).matches()) {
-                throw invalidPropertyName(propertyName);
-            }
+        File file = new File(configuredPath);
+        if (!file.isAbsolute()) {
+            throw new IllegalArgumentException("Environment variable " + CONFIGURATION_ENV + " must contain an absolute path: " + configuredPath);
+        }
+        return file;
+    }
 
-            int index;
-            try {
-                index = Integer.parseInt(indexText);
-            } catch (NumberFormatException e) {
-                throw invalidPropertyName(propertyName);
-            }
+    private static MirrorConfiguration loadFile(File file) {
+        if (!file.exists()) {
+            return empty();
+        }
+        if (!file.isFile()) {
+            throw new RuntimeException("Mirror configuration is not a file: " + file);
+        }
 
-            String field = suffix.substring(separator + 1);
-            if (!MIRROR_FIELDS.contains(field)) {
-                throw new IllegalArgumentException("Unknown mirror property: " + propertyName);
+        try {
+            if (file.length() > MAX_FILE_SIZE) {
+                throw new IllegalArgumentException("Mirror configuration exceeds " + MAX_FILE_SIZE + " bytes.");
             }
-            if (!(entry.getValue() instanceof String)) {
-                throw new IllegalArgumentException("Mirror property " + propertyName + " must be a string.");
+            byte[] content = Files.readAllBytes(file.toPath());
+            if (content.length > MAX_FILE_SIZE) {
+                throw new IllegalArgumentException("Mirror configuration exceeds " + MAX_FILE_SIZE + " bytes.");
             }
+            String json = new String(content, StandardCharsets.UTF_8);
+            return parse(json);
+        } catch (IOException | RuntimeException e) {
+            throw new RuntimeException("Could not load mirror configuration from '" + file + "'.", e);
+        }
+    }
 
-            Map<String, String> mirror = configuredMirrors.computeIfAbsent(index, ignored -> new TreeMap<>());
-            mirror.put(field, (String) entry.getValue());
+    static MirrorConfiguration parse(String json) {
+        Map<String, Object> root = object(MinimalJsonParser.parse(json), "root");
+        rejectUnknownFields(root, ROOT_FIELDS, "root");
+
+        BigDecimal version = number(required(root, "version", "root"), "root.version");
+        if (version.compareTo(BigDecimal.ONE) != 0) {
+            throw new IllegalArgumentException("Unsupported mirror configuration version: " + version);
         }
 
         List<Mirror> mirrors = new ArrayList<>();
-        for (Map.Entry<Integer, Map<String, String>> entry : configuredMirrors.entrySet()) {
-            Mirror mirror = parseMirror(entry.getKey(), entry.getValue());
-            if (mirror != null) {
-                mirrors.add(mirror);
+        if (root.containsKey("mirrors")) {
+            Object configuredMirrors = root.get("mirrors");
+            List<Object> entries = array(configuredMirrors, "root.mirrors");
+            for (int index = 0; index < entries.size(); index++) {
+                Mirror mirror = parseMirror(entries.get(index), "root.mirrors[" + index + "]");
+                if (mirror != null) {
+                    mirrors.add(mirror);
+                }
             }
         }
         return new MirrorConfiguration(mirrors);
@@ -103,51 +127,81 @@ final class MirrorConfiguration {
         return new ArrayList<>(result);
     }
 
-    private static Mirror parseMirror(int index, Map<String, String> properties) {
-        String path = PROPERTY_PREFIX + index;
-        if (!optionalBoolean(properties, "enabled", true, path)) {
+    private static Mirror parseMirror(Object value, String path) {
+        Map<String, Object> mirror = object(value, path);
+        rejectUnknownFields(mirror, MIRROR_FIELDS, path);
+
+        if (!optionalBoolean(mirror, "enabled", true, path)) {
             return null;
         }
 
-        String patternText = required(properties, "pattern", path);
+        String patternText = string(required(mirror, "pattern", path), path + ".pattern");
         Pattern pattern;
         try {
             pattern = Pattern.compile(patternText);
         } catch (PatternSyntaxException e) {
-            throw new IllegalArgumentException("Invalid regular expression in " + path + ".pattern: " + e.getDescription(), e);
+            throw new IllegalArgumentException("Invalid regular expression at " + path + ".pattern: " + e.getDescription(), e);
         }
 
-        String replacement = required(properties, "replacement", path);
-        boolean requireChecksum = optionalBoolean(properties, "requireChecksum", true, path);
+        String replacement = string(required(mirror, "replacement", path), path + ".replacement");
+        boolean requireChecksum = optionalBoolean(mirror, "requireChecksum", true, path);
         return new Mirror(pattern, replacement, requireChecksum);
     }
 
-    private static String required(Map<String, String> properties, String field, String path) {
-        String value = properties.get(field);
-        if (value == null) {
-            throw new IllegalArgumentException("Missing required property " + path + "." + field + ".");
+    private static Object required(Map<String, Object> object, String field, String path) {
+        if (!object.containsKey(field)) {
+            throw new IllegalArgumentException("Missing required field " + path + "." + field + ".");
         }
-        return value;
+        return object.get(field);
     }
 
-    private static boolean optionalBoolean(Map<String, String> properties, String field, boolean defaultValue, String path) {
-        String value = properties.get(field);
-        if (value == null) {
+    private static boolean optionalBoolean(Map<String, Object> object, String field, boolean defaultValue, String path) {
+        if (!object.containsKey(field)) {
             return defaultValue;
         }
-        if ("true".equalsIgnoreCase(value)) {
-            return true;
+        Object value = object.get(field);
+        if (!(value instanceof Boolean)) {
+            throw new IllegalArgumentException(path + "." + field + " must be a boolean.");
         }
-        if ("false".equalsIgnoreCase(value)) {
-            return false;
-        }
-        throw new IllegalArgumentException(path + "." + field + " must be true or false.");
+        return (Boolean) value;
     }
 
-    private static IllegalArgumentException invalidPropertyName(String propertyName) {
-        return new IllegalArgumentException(
-            "Invalid mirror property name '" + propertyName + "'. Expected " + PROPERTY_PREFIX + "<index>.<field>."
-        );
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> object(Object value, String path) {
+        if (!(value instanceof Map)) {
+            throw new IllegalArgumentException(path + " must be an object.");
+        }
+        return (Map<String, Object>) value;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> array(Object value, String path) {
+        if (!(value instanceof List)) {
+            throw new IllegalArgumentException(path + " must be an array.");
+        }
+        return (List<Object>) value;
+    }
+
+    private static String string(Object value, String path) {
+        if (!(value instanceof String)) {
+            throw new IllegalArgumentException(path + " must be a string.");
+        }
+        return (String) value;
+    }
+
+    private static BigDecimal number(Object value, String path) {
+        if (!(value instanceof BigDecimal)) {
+            throw new IllegalArgumentException(path + " must be a number.");
+        }
+        return (BigDecimal) value;
+    }
+
+    private static void rejectUnknownFields(Map<String, Object> object, Set<String> allowedFields, String path) {
+        for (String field : object.keySet()) {
+            if (!allowedFields.contains(field)) {
+                throw new IllegalArgumentException("Unknown field " + path + "." + field + ".");
+            }
+        }
     }
 
     private static Set<String> fields(String... values) {

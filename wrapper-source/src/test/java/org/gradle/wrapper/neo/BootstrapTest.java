@@ -94,7 +94,7 @@ class BootstrapTest {
             Arrays.asList(
                 "-Xmx256m",
                 "-Duser.language=en",
-                "-Dgradle.wrapper.neo.mirrors.0.enabled=false",
+                "-Dexample.option=value",
                 "-Dgradle.wrapper.neo.bootstrap=true",
                 "-Dorg.gradle.wrapper.neo.app-home=/wrong",
                 "-Dorg.gradle.wrapper.neo.source-file=/wrong",
@@ -109,7 +109,7 @@ class BootstrapTest {
             Arrays.asList(
                 "-Xmx256m",
                 "-Duser.language=en",
-                "-Dgradle.wrapper.neo.mirrors.0.enabled=false",
+                "-Dexample.option=value",
                 "-D" + Bootstrap.APP_HOME_PROPERTY + "=" + appHome,
                 "-D" + Bootstrap.SOURCE_FILE_PROPERTY + "=" + sourceFile,
                 "-D" + Bootstrap.JAR_FILE_PROPERTY + "=" + jarFile

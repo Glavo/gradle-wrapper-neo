@@ -27,7 +27,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -41,10 +40,12 @@ class InstallTest {
     private static final byte[] BAD_ARCHIVE_CONTENT = "bad archive content".getBytes(StandardCharsets.UTF_8);
     private static final URI OFFICIAL_DISTRIBUTION_URL = URI.create("https://services.gradle.org/distributions/" + ZIP_FILE_NAME);
     private static final URI MIRROR_DISTRIBUTION_URL = URI.create("https://mirror.example/gradle/" + ZIP_FILE_NAME);
-    private static final Map<String, String> MIRROR_PROPERTIES = Map.of(
-        MirrorConfiguration.PROPERTY_PREFIX + "0.pattern", "^https://services[.]gradle[.]org/distributions/(.+)$",
-        MirrorConfiguration.PROPERTY_PREFIX + "0.replacement", "https://mirror.example/gradle/$1"
-    );
+    private static final String MIRROR_CONFIGURATION = "{" +
+        "\"version\":1," +
+        "\"mirrors\":[{" +
+        "\"pattern\":\"^https://services[.]gradle[.]org/distributions/(.+)$\"," +
+        "\"replacement\":\"https://mirror.example/gradle/$1\"" +
+        "}]}";
 
     @TempDir
     Path temporaryDirectory;
@@ -204,7 +205,7 @@ class InstallTest {
     private void configureMirror(File templateZip) throws Exception {
         configuration.setDistribution(OFFICIAL_DISTRIBUTION_URL);
         configuration.setDistributionSha256Sum(Install.calculateSha256Sum(templateZip));
-        configuration.setMirrorConfiguration(MirrorConfiguration.fromSystemProperties(MIRROR_PROPERTIES));
+        configuration.setMirrorConfiguration(MirrorConfiguration.parse(MIRROR_CONFIGURATION));
     }
 
     private static void createTestZip(File zipDestination) throws Exception {
