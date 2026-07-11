@@ -32,8 +32,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+/**
+ * Loads user-level mirror rules and resolves ordered distribution download candidates.
+ *
+ * <p>Mirror results precede the original distribution URL, which is always retained as the final
+ * fallback. Rules that require a checksum are skipped when no checksum is configured.</p>
+ */
 final class MirrorConfiguration {
+    /** Default configuration file name within the Gradle user home. */
     static final String FILE_NAME = "gradle-wrapper-neo.json";
+    /** Environment variable that overrides the configuration file location. */
     static final String CONFIGURATION_ENV = "GRADLE_WRAPPER_NEO_CONFIG";
     private static final int MAX_FILE_SIZE = 1024 * 1024;
     private static final Set<String> ROOT_FIELDS = fields("version", "mirrors");
@@ -45,15 +53,31 @@ final class MirrorConfiguration {
         this.mirrors = Collections.unmodifiableList(new ArrayList<>(mirrors));
     }
 
+    /** Returns a configuration that resolves only the original distribution URL.
+     * @return an empty mirror configuration
+     */
     static MirrorConfiguration empty() {
         return new MirrorConfiguration(Collections.emptyList());
     }
 
+    /**
+     * Loads the effective configuration file for a Gradle user home.
+     *
+     * @param gradleUserHome the effective Gradle user home
+     * @return the parsed mirror configuration, or an empty configuration when the file is absent
+     */
     static MirrorConfiguration load(File gradleUserHome) {
         File file = configurationFile(gradleUserHome, System.getenv(CONFIGURATION_ENV));
         return loadFile(file);
     }
 
+    /**
+     * Resolves the configuration file from the default home and an optional environment override.
+     *
+     * @param gradleUserHome the effective Gradle user home
+     * @param configuredPath the environment override, or {@code null}
+     * @return the effective configuration file
+     */
     static File configurationFile(File gradleUserHome, String configuredPath) {
         if (configuredPath == null) {
             return new File(gradleUserHome, FILE_NAME);
@@ -92,6 +116,12 @@ final class MirrorConfiguration {
         }
     }
 
+    /**
+     * Parses and validates a Wrapper Neo mirror configuration.
+     *
+     * @param json the JSON configuration text
+     * @return the validated mirror configuration
+     */
     static MirrorConfiguration parse(String json) {
         Map<String, Object> root = object(MinimalJsonParser.parse(json), "root");
         rejectUnknownFields(root, ROOT_FIELDS, "root");
@@ -115,6 +145,13 @@ final class MirrorConfiguration {
         return new MirrorConfiguration(mirrors);
     }
 
+    /**
+     * Resolves mirror candidates for a distribution URL.
+     *
+     * @param source the original distribution URL
+     * @param checksumProvided whether the distribution has an expected SHA-256 checksum
+     * @return distinct candidate URLs in attempt order, ending with {@code source}
+     */
     List<URI> resolve(URI source, boolean checksumProvided) {
         LinkedHashSet<URI> result = new LinkedHashSet<>();
         for (Mirror mirror : mirrors) {

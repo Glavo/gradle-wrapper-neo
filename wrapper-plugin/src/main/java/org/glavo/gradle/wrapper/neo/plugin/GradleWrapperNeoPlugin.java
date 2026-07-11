@@ -18,9 +18,22 @@ package org.glavo.gradle.wrapper.neo.plugin;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 
+/**
+ * Registers the {@link WrapperNeo} task that generates a source-based Gradle Wrapper.
+ */
 public final class GradleWrapperNeoPlugin implements Plugin<Project> {
+    /** The name of the task registered by this plugin. */
     public static final String TASK_NAME = "wrapperNeo";
 
+    /** Creates a Gradle Wrapper Neo plugin instance. */
+    public GradleWrapperNeoPlugin() {
+    }
+
+    /**
+     * Registers the {@value #TASK_NAME} task for the target project.
+     *
+     * @param project the project to configure
+     */
     @Override
     public void apply(Project project) {
         project.getTasks().register(TASK_NAME, WrapperNeo.class, task -> {

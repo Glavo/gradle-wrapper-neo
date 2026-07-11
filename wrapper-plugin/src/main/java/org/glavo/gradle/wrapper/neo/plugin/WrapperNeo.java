@@ -42,6 +42,12 @@ import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Set;
 
+/**
+ * Generates the Gradle Wrapper Neo launchers, Java source, and standard Wrapper properties.
+ *
+ * <p>The generated files use the conventional project layout. Distribution and archive
+ * settings are exposed as Gradle properties so builds can configure the generated Wrapper.</p>
+ */
 public abstract class WrapperNeo extends DefaultTask {
     private static final String BUNDLE_RESOURCE_PREFIX = "/org/glavo/gradle/wrapper/neo/plugin/bundle/";
     private static final int MAX_CHECKSUM_RESPONSE_SIZE = 1024;
@@ -52,16 +58,27 @@ public abstract class WrapperNeo extends DefaultTask {
     private final File sourceFile;
     private final File propertiesFile;
 
+    /** The Gradle distribution variant used when the distribution URL is derived from a version. */
     public enum DistributionType {
+        /** The binary-only Gradle distribution. */
         BIN,
+        /** The complete Gradle distribution including documentation and sources. */
         ALL
     }
 
+    /** The base directory used for distribution and archive paths. */
     public enum PathBase {
+        /** Resolve the path relative to the Gradle user home. */
         GRADLE_USER_HOME,
+        /** Resolve the path relative to the project directory. */
         PROJECT
     }
 
+    /**
+     * Creates the task and configures its conventional output locations and Wrapper defaults.
+     *
+     * @param layout the target project layout
+     */
     @Inject
     public WrapperNeo(ProjectLayout layout) {
         scriptFile = layout.getProjectDirectory().file("gradlew").getAsFile();
@@ -92,73 +109,173 @@ public abstract class WrapperNeo extends DefaultTask {
         getLegacyWrapperJar().convention(layout.getProjectDirectory().file("gradle/wrapper/gradle-wrapper.jar"));
     }
 
+    /**
+     * Returns the Gradle version used to derive the distribution URL. Defaults to the current Gradle version.
+     *
+     * @return the configurable Gradle version
+     */
     @Input
     public abstract Property<String> getGradleVersion();
 
+    /**
+     * Returns the distribution variant. Defaults to {@link DistributionType#BIN}.
+     *
+     * @return the configurable distribution variant
+     */
     @Input
     public abstract Property<DistributionType> getDistributionType();
 
+    /**
+     * Returns the optional complete distribution URL, which overrides the version and distribution type.
+     *
+     * @return the configurable distribution URL
+     */
     @Optional
     @Input
     public abstract Property<String> getDistributionUrl();
 
+    /**
+     * Returns the optional SHA-256 checksum written to the generated Wrapper properties.
+     *
+     * @return the configurable distribution checksum
+     */
     @Optional
     @Input
     public abstract Property<String> getDistributionSha256Sum();
 
+    /**
+     * Returns whether a missing checksum is downloaded from the distribution URL with a {@code .sha256} suffix.
+     *
+     * @return the configurable checksum download flag
+     */
     @Input
     public abstract Property<Boolean> getDownloadDistributionSha256Sum();
 
+    /**
+     * Returns the base directory for the installed Gradle distribution.
+     *
+     * @return the configurable distribution base
+     */
     @Input
     public abstract Property<PathBase> getDistributionBase();
 
+    /**
+     * Returns the path below {@link #getDistributionBase()} used for installed distributions.
+     *
+     * @return the configurable distribution path
+     */
     @Input
     public abstract Property<String> getDistributionPath();
 
+    /**
+     * Returns the base directory for downloaded distribution archives.
+     *
+     * @return the configurable archive base
+     */
     @Input
     public abstract Property<PathBase> getArchiveBase();
 
+    /**
+     * Returns the path below {@link #getArchiveBase()} used for downloaded archives.
+     *
+     * @return the configurable archive path
+     */
     @Input
     public abstract Property<String> getArchivePath();
 
+    /**
+     * Returns the connection and read timeout in milliseconds. Defaults to {@code 10000}.
+     *
+     * @return the configurable network timeout
+     */
     @Input
     public abstract Property<Integer> getNetworkTimeout();
 
+    /**
+     * Returns the number of additional distribution download attempts made by the generated Wrapper.
+     *
+     * @return the configurable retry count
+     */
     @Input
     public abstract Property<Integer> getRetries();
 
+    /**
+     * Returns the initial delay in milliseconds between distribution download attempts.
+     *
+     * @return the configurable retry backoff
+     */
     @Input
     public abstract Property<Integer> getRetryBackOffMs();
 
+    /**
+     * Returns the value written to the generated {@code validateDistributionUrl} Wrapper property.
+     *
+     * @return the configurable URL validation flag
+     */
     @Input
     public abstract Property<Boolean> getValidateDistributionUrl();
 
+    /**
+     * Returns whether generation removes the legacy {@code gradle-wrapper.jar}. Defaults to {@code true}.
+     *
+     * @return the configurable legacy JAR removal flag
+     */
     @Input
     public abstract Property<Boolean> getRemoveLegacyWrapperJar();
 
+    /**
+     * Returns the legacy Wrapper JAR removed when {@link #getRemoveLegacyWrapperJar()} is enabled.
+     *
+     * @return the internal legacy Wrapper JAR location
+     */
     @Internal
     public abstract RegularFileProperty getLegacyWrapperJar();
 
+    /**
+     * Sets {@link #getGradleVersion()} from the {@code --gradle-version} task option.
+     *
+     * @param value the Gradle version
+     */
     @Option(option = "gradle-version", description = "The Gradle version used by the generated wrapper.")
     public void configureGradleVersion(String value) {
         getGradleVersion().set(value);
     }
 
+    /**
+     * Sets {@link #getDistributionType()} from the {@code --distribution-type} task option.
+     *
+     * @param value {@code bin} or {@code all}
+     */
     @Option(option = "distribution-type", description = "The Gradle distribution type: bin or all.")
     public void configureDistributionType(String value) {
         getDistributionType().set(parseDistributionType(value));
     }
 
+    /**
+     * Sets {@link #getDistributionUrl()} from the {@code --gradle-distribution-url} task option.
+     *
+     * @param value the complete distribution URL
+     */
     @Option(option = "gradle-distribution-url", description = "The complete URL of the Gradle distribution.")
     public void configureDistributionUrl(String value) {
         getDistributionUrl().set(value);
     }
 
+    /**
+     * Sets {@link #getDistributionSha256Sum()} from the checksum task option.
+     *
+     * @param value the 64-character hexadecimal SHA-256 checksum
+     */
     @Option(option = "gradle-distribution-sha256-sum", description = "The SHA-256 checksum of the Gradle distribution.")
     public void configureDistributionSha256Sum(String value) {
         getDistributionSha256Sum().set(value);
     }
 
+    /**
+     * Sets {@link #getNetworkTimeout()} from the {@code --network-timeout} task option.
+     *
+     * @param value the timeout in milliseconds
+     */
     @Option(option = "network-timeout", description = "The network timeout used by the generated wrapper, in milliseconds.")
     public void configureNetworkTimeout(String value) {
         try {
@@ -168,6 +285,11 @@ public abstract class WrapperNeo extends DefaultTask {
         }
     }
 
+    /**
+     * Writes the launchers, source file, and Wrapper properties using the configured values.
+     *
+     * @throws IOException if a generated file or checksum response cannot be read or written
+     */
     @TaskAction
     public void generate() throws IOException {
         validateConfiguration();

@@ -21,12 +21,25 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Parses JSON without external runtime dependencies.
+ *
+ * <p>Objects preserve member order, numbers are represented by {@link BigDecimal}, duplicate
+ * object keys are rejected, and nesting is limited to protect Wrapper startup.</p>
+ */
 final class MinimalJsonParser {
     private static final int MAX_DEPTH = 64;
 
     private MinimalJsonParser() {
     }
 
+    /**
+     * Parses one complete JSON value.
+     *
+     * @param input the JSON text
+     * @return the parsed JSON value
+     * @throws IllegalArgumentException if the input is malformed
+     */
     static Object parse(String input) {
         return new Parser(input).parse();
     }

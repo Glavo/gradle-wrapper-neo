@@ -37,32 +37,55 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Merges the Wrapper runtime sources into the dependency-free single Java source distribution.
+ *
+ * <p>The task removes package boundaries, consolidates imports, rewrites project-local static
+ * imports, and keeps exactly one public main class in the generated source.</p>
+ */
 public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
     private static final String ORIGINAL_MAIN_CLASS_NAME = "GradleWrapperMain";
     private static final String PROJECT_PACKAGE_PREFIX = "org.gradle.";
     private static final String JSPECIFY_PACKAGE_PREFIX = "org.jspecify.annotations.";
     private static final Pattern JSPECIFY_ANNOTATION_PATTERN = Pattern.compile("@(?:org\\.jspecify\\.annotations\\.)?(NullMarked|Nullable|NullUnmarked)\\b");
 
+    /** Creates the task with {@code GradleWrapperNeo} as the generated main class name. */
     public GenerateSingleJavaWrapperTask() {
         getMainClassName().convention("GradleWrapperNeo");
     }
 
+    /** Returns the directory containing the Wrapper runtime sources.
+     * @return the source directory
+     */
     @InputDirectory
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract DirectoryProperty getSourceDirectory();
 
+    /** Returns the generated single Java source file.
+     * @return the output file
+     */
     @OutputFile
     public abstract RegularFileProperty getOutputFile();
 
+    /** Returns the public class name used by the generated source.
+     * @return the generated main class name
+     */
     @Input
     public abstract Property<String> getMainClassName();
 
+    /** Returns the Wrapper Neo version recorded in the generated file header.
+     * @return the Wrapper Neo version
+     */
     @Input
     public abstract Property<String> getWrapperVersion();
 
+    /** Returns the project URL recorded in the generated file header.
+     * @return the project URL
+     */
     @Input
     public abstract Property<String> getProjectUrl();
 
+    /** Reads, transforms, and writes the configured Wrapper source set. */
     @TaskAction
     public void generate() {
         Path sourceRoot = getSourceDirectory().get().getAsFile().toPath();

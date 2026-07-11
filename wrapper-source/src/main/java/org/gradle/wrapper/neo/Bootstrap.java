@@ -46,20 +46,37 @@ import javax.lang.model.SourceVersion;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
+/**
+ * Compiles the source-based Wrapper into a cached JAR and relaunches it when the source changes.
+ *
+ * <p>The launcher supplies the project home, source file, and target JAR as absolute system
+ * properties. A file lock serializes cache updates across concurrent Wrapper processes.</p>
+ */
 public final class Bootstrap {
     private static final String MAIN_CLASS_NAME = "GradleWrapperNeo";
     private static final String TEMPORARY_JAR_PREFIX = "gradle-wrapper-neo-";
     private static final String CLASSES_DIR_NAME = "classes";
     private static final String LOCK_FILE_NAME = "lock";
     private static final String BOOTSTRAP_PROPERTY = "gradle.wrapper.neo.bootstrap";
+    /** System property containing the absolute project directory used as the Wrapper application home. */
     public static final String APP_HOME_PROPERTY = "org.gradle.wrapper.neo.app-home";
+    /** System property containing the absolute path to {@code GradleWrapperNeo.java}. */
     public static final String SOURCE_FILE_PROPERTY = "org.gradle.wrapper.neo.source-file";
+    /** System property containing the absolute path to the cached Wrapper JAR. */
     public static final String JAR_FILE_PROPERTY = "org.gradle.wrapper.neo.jar-file";
     private static final String MANIFEST_SOURCE_SHA256 = "Gradle-Wrapper-Neo-Source-SHA256";
 
     private Bootstrap() {
     }
 
+    /**
+     * Ensures the cached Wrapper JAR matches the configured source and relaunches it when needed.
+     *
+     * @param args the command-line arguments forwarded to the Wrapper
+     * @param mainClass the class used to locate the currently running code
+     * @return {@code true} when the caller must stop because another Wrapper process was launched
+     * @throws Exception if the source cannot be compiled, cached, or launched
+     */
     public static boolean handle(String[] args, Class<?> mainClass) throws Exception {
         Path appHome = appHome();
         Path sourceFile = sourceFile();
@@ -163,6 +180,11 @@ public final class Bootstrap {
         return path.normalize();
     }
 
+    /**
+     * Returns the project directory containing the Wrapper configuration.
+     *
+     * @return the normalized absolute application home
+     */
     public static Path appHome() {
         return requireAbsolutePath(APP_HOME_PROPERTY);
     }
