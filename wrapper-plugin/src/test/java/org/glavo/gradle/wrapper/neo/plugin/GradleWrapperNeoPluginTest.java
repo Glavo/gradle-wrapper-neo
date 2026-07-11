@@ -15,6 +15,8 @@
  */
 package org.glavo.gradle.wrapper.neo.plugin;
 
+import com.sun.net.httpserver.HttpServer;
+
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
 import org.gradle.testkit.runner.TaskOutcome;
@@ -23,6 +25,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,6 +35,7 @@ import java.util.Properties;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,6 +48,8 @@ class GradleWrapperNeoPluginTest {
         assertThrows(NoSuchMethodException.class, () -> WrapperNeo.class.getMethod("getScriptFile"));
         assertThrows(NoSuchMethodException.class, () -> WrapperNeo.class.getMethod("getBatchScriptFile"));
         assertThrows(NoSuchMethodException.class, () -> WrapperNeo.class.getMethod("getPowerShellScriptFile"));
+        assertThrows(NoSuchMethodException.class, () -> WrapperNeo.class.getMethod("getSourceFile"));
+        assertThrows(NoSuchMethodException.class, () -> WrapperNeo.class.getMethod("getPropertiesFile"));
     }
 
     @Test
@@ -120,6 +127,95 @@ class GradleWrapperNeoPluginTest {
         assertEquals("false", properties.getProperty("validateDistributionUrl"));
         assertEquals("GRADLE_USER_HOME", properties.getProperty("zipStoreBase"));
         assertEquals("wrapper/dists", properties.getProperty("zipStorePath"));
+    }
+
+    @Test
+    void downloadsDistributionSha256SumWhenNotConfigured() throws Exception {
+        String checksum = repeat('b', 64);
+        byte[] response = (checksum + "\n").getBytes(StandardCharsets.US_ASCII);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/gradle.zip.sha256", exchange -> {
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(response);
+            }
+        });
+        server.start();
+
+        try {
+            writeMinimalProject(
+                "wrapperNeo {\n" +
+                    "    distributionUrl = 'http://127.0.0.1:" + server.getAddress().getPort() + "/gradle.zip'\n" +
+                    "}\n"
+            );
+
+            BuildResult result = runWrapperNeo();
+
+            assertEquals(TaskOutcome.SUCCESS, result.task(":wrapperNeo").getOutcome());
+            assertEquals(checksum, loadGeneratedProperties().getProperty("distributionSha256Sum"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+
+    @Test
+    void configuredDistributionSha256SumTakesPriority() throws IOException {
+        String checksum = repeat('c', 64);
+        writeMinimalProject(
+            "wrapperNeo {\n" +
+                "    distributionUrl = 'http://127.0.0.1:1/gradle.zip'\n" +
+                "    distributionSha256Sum = '" + checksum + "'\n" +
+                "}\n"
+        );
+
+        BuildResult result = runWrapperNeo();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":wrapperNeo").getOutcome());
+        assertEquals(checksum, loadGeneratedProperties().getProperty("distributionSha256Sum"));
+    }
+    @Test
+    void canDisableDistributionSha256SumDownload() throws IOException {
+        writeMinimalProject(
+            "wrapperNeo {\n" +
+                "    distributionUrl = 'http://127.0.0.1:1/gradle.zip'\n" +
+                "    downloadDistributionSha256Sum = false\n" +
+                "}\n"
+        );
+
+        BuildResult result = runWrapperNeo();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":wrapperNeo").getOutcome());
+        assertNull(loadGeneratedProperties().getProperty("distributionSha256Sum"));
+    }
+
+    private void writeMinimalProject(String configuration) throws IOException {
+        Files.write(
+            projectDirectory.resolve("settings.gradle"),
+            "rootProject.name = 'checksum-test'\n".getBytes(StandardCharsets.UTF_8)
+        );
+        Files.write(
+            projectDirectory.resolve("build.gradle"),
+            ("plugins { id 'org.glavo.gradle-wrapper-neo' }\n" + configuration).getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private BuildResult runWrapperNeo() {
+        return GradleRunner.create()
+            .withProjectDir(projectDirectory.toFile())
+            .withPluginClasspath()
+            .withArguments("wrapperNeo", "--stacktrace")
+            .build();
+    }
+
+    private Properties loadGeneratedProperties() throws IOException {
+        Properties properties = new Properties();
+        try (InputStream input = Files.newInputStream(
+            projectDirectory.resolve("gradle/wrapper/gradle-wrapper.properties")
+        )) {
+            properties.load(input);
+        }
+        return properties;
     }
 
     private static void assertLfOnly(Path file) throws IOException {

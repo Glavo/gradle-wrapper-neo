@@ -23,7 +23,6 @@ import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
-import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.options.Option;
 import org.gradle.util.GradleVersion;
@@ -32,6 +31,8 @@ import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,10 +44,13 @@ import java.util.Set;
 
 public abstract class WrapperNeo extends DefaultTask {
     private static final String BUNDLE_RESOURCE_PREFIX = "/org/glavo/gradle/wrapper/neo/plugin/bundle/";
+    private static final int MAX_CHECKSUM_RESPONSE_SIZE = 1024;
 
     private final File scriptFile;
     private final File batchScriptFile;
     private final File powerShellScriptFile;
+    private final File sourceFile;
+    private final File propertiesFile;
 
     public enum DistributionType {
         BIN,
@@ -63,11 +67,15 @@ public abstract class WrapperNeo extends DefaultTask {
         scriptFile = layout.getProjectDirectory().file("gradlew").getAsFile();
         batchScriptFile = layout.getProjectDirectory().file("gradlew.bat").getAsFile();
         powerShellScriptFile = layout.getProjectDirectory().file("gradlew.ps1").getAsFile();
+        sourceFile = layout.getProjectDirectory().file("gradle/wrapper/GradleWrapperNeo.java").getAsFile();
+        propertiesFile = layout.getProjectDirectory().file("gradle/wrapper/gradle-wrapper.properties").getAsFile();
 
         getOutputs().upToDateWhen(ignored -> false);
         getOutputs().file(scriptFile);
         getOutputs().file(batchScriptFile);
         getOutputs().file(powerShellScriptFile);
+        getOutputs().file(sourceFile);
+        getOutputs().file(propertiesFile);
         getGradleVersion().convention(GradleVersion.current().getVersion());
         getDistributionType().convention(DistributionType.BIN);
         getDistributionBase().convention(PathBase.GRADLE_USER_HOME);
@@ -78,10 +86,9 @@ public abstract class WrapperNeo extends DefaultTask {
         getRetries().convention(0);
         getRetryBackOffMs().convention(500);
         getValidateDistributionUrl().convention(true);
+        getDownloadDistributionSha256Sum().convention(true);
         getRemoveLegacyWrapperJar().convention(true);
 
-        getSourceFile().convention(layout.getProjectDirectory().file("gradle/wrapper/GradleWrapperNeo.java"));
-        getPropertiesFile().convention(layout.getProjectDirectory().file("gradle/wrapper/gradle-wrapper.properties"));
         getLegacyWrapperJar().convention(layout.getProjectDirectory().file("gradle/wrapper/gradle-wrapper.jar"));
     }
 
@@ -98,6 +105,9 @@ public abstract class WrapperNeo extends DefaultTask {
     @Optional
     @Input
     public abstract Property<String> getDistributionSha256Sum();
+
+    @Input
+    public abstract Property<Boolean> getDownloadDistributionSha256Sum();
 
     @Input
     public abstract Property<PathBase> getDistributionBase();
@@ -125,12 +135,6 @@ public abstract class WrapperNeo extends DefaultTask {
 
     @Input
     public abstract Property<Boolean> getRemoveLegacyWrapperJar();
-
-    @OutputFile
-    public abstract RegularFileProperty getSourceFile();
-
-    @OutputFile
-    public abstract RegularFileProperty getPropertiesFile();
 
     @Internal
     public abstract RegularFileProperty getLegacyWrapperJar();
@@ -168,12 +172,18 @@ public abstract class WrapperNeo extends DefaultTask {
     public void generate() throws IOException {
         validateConfiguration();
 
+        String distributionUrl = distributionUrl();
+        String distributionSha256Sum = resolveDistributionSha256Sum(distributionUrl);
+
         writeBundledFile("gradlew", scriptFile.toPath(), LineEndings.LF);
         setExecutable(scriptFile.toPath());
         writeBundledFile("gradlew.bat", batchScriptFile.toPath(), LineEndings.CRLF);
         writeBundledFile("gradlew.ps1", powerShellScriptFile.toPath(), LineEndings.LF);
-        writeBundledFile("GradleWrapperNeo.java", getSourceFile().get().getAsFile().toPath(), LineEndings.LF);
-        writeIfChanged(getPropertiesFile().get().getAsFile().toPath(), propertiesFileContent().getBytes(StandardCharsets.ISO_8859_1));
+        writeBundledFile("GradleWrapperNeo.java", sourceFile.toPath(), LineEndings.LF);
+        writeIfChanged(
+            propertiesFile.toPath(),
+            propertiesFileContent(distributionUrl, distributionSha256Sum).getBytes(StandardCharsets.ISO_8859_1)
+        );
 
         if (getRemoveLegacyWrapperJar().get()) {
             Path legacyJar = getLegacyWrapperJar().get().getAsFile().toPath();
@@ -197,13 +207,13 @@ public abstract class WrapperNeo extends DefaultTask {
         }
     }
 
-    private String propertiesFileContent() {
+    private String propertiesFileContent(String distributionUrl, String distributionSha256Sum) {
         StringBuilder result = new StringBuilder();
         appendProperty(result, "distributionBase", getDistributionBase().get().name());
         appendProperty(result, "distributionPath", getDistributionPath().get());
-        appendProperty(result, "distributionUrl", distributionUrl());
-        if (getDistributionSha256Sum().isPresent()) {
-            appendProperty(result, "distributionSha256Sum", getDistributionSha256Sum().get());
+        appendProperty(result, "distributionUrl", distributionUrl);
+        if (distributionSha256Sum != null) {
+            appendProperty(result, "distributionSha256Sum", distributionSha256Sum);
         }
         appendProperty(result, "networkTimeout", Integer.toString(getNetworkTimeout().get()));
         appendProperty(result, "retries", Integer.toString(getRetries().get()));
@@ -225,6 +235,66 @@ public abstract class WrapperNeo extends DefaultTask {
             + "-"
             + getDistributionType().get().name().toLowerCase(Locale.ROOT)
             + ".zip";
+    }
+
+    private String resolveDistributionSha256Sum(String distributionUrl) {
+        String configuredChecksum = getDistributionSha256Sum().getOrNull();
+        if (configuredChecksum != null) {
+            return configuredChecksum;
+        }
+        if (!getDownloadDistributionSha256Sum().get()) {
+            return null;
+        }
+
+        String checksumUrl = checksumUrl(distributionUrl);
+        try {
+            URLConnection connection = new URL(checksumUrl).openConnection();
+            int timeout = getNetworkTimeout().get();
+            connection.setConnectTimeout(timeout);
+            connection.setReadTimeout(timeout);
+
+            byte[] content;
+            try (InputStream input = connection.getInputStream()) {
+                content = readLimitedBytes(input, MAX_CHECKSUM_RESPONSE_SIZE);
+            }
+
+            String checksum = new String(content, StandardCharsets.US_ASCII).trim();
+            if (!isSha256(checksum)) {
+                throw new GradleException(
+                    "The SHA-256 checksum downloaded from " + checksumUrl +
+                        " must contain exactly 64 hexadecimal characters."
+                );
+            }
+            return checksum.toLowerCase(Locale.ROOT);
+        } catch (IOException e) {
+            throw new GradleException("Could not download the Gradle distribution SHA-256 checksum from " + checksumUrl + ".", e);
+        }
+    }
+
+    private static String checksumUrl(String distributionUrl) {
+        int suffixIndex = distributionUrl.length();
+        int queryIndex = distributionUrl.indexOf('?');
+        if (queryIndex >= 0) {
+            suffixIndex = queryIndex;
+        }
+        int fragmentIndex = distributionUrl.indexOf('#');
+        if (fragmentIndex >= 0 && fragmentIndex < suffixIndex) {
+            suffixIndex = fragmentIndex;
+        }
+        return distributionUrl.substring(0, suffixIndex) + ".sha256" + distributionUrl.substring(suffixIndex);
+    }
+
+    private static byte[] readLimitedBytes(InputStream input, int maximumSize) throws IOException {
+        byte[] buffer = new byte[256];
+        int length;
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+        while ((length = input.read(buffer)) >= 0) {
+            if (output.size() + length > maximumSize) {
+                throw new GradleException("The SHA-256 checksum response exceeds " + maximumSize + " bytes.");
+            }
+            output.write(buffer, 0, length);
+        }
+        return output.toByteArray();
     }
 
     private static void appendProperty(StringBuilder result, String key, String value) {
