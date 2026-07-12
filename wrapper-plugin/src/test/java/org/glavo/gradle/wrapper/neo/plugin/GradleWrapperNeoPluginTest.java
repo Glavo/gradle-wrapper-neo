@@ -206,6 +206,25 @@ class GradleWrapperNeoPluginTest {
     }
 
     @Test
+    void usesSnapshotRepositoryForSnapshotGradleVersions() throws IOException {
+        writeMinimalProject(
+            "wrapperNeo {\n" +
+                "    gradleVersion = '9.9.1-20101224110000+1100'\n" +
+                "    downloadDistributionSha256Sum = false\n" +
+                "}\n"
+        );
+
+        BuildResult result = runWrapperNeo();
+
+        assertSuccessfulTask(result);
+        assertEquals(
+            "https://services.gradle.org/distributions-snapshots/" +
+                "gradle-9.9.1-20101224110000+1100-bin.zip",
+            loadGeneratedProperties().getProperty("distributionUrl")
+        );
+    }
+
+    @Test
     void supportsGradleEight() throws IOException {
         String checksum = repeat('e', 64);
         writeMinimalProject("");

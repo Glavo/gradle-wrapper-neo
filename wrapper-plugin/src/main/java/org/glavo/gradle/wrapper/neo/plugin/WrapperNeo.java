@@ -349,7 +349,12 @@ public abstract class WrapperNeo extends DefaultTask {
         }
         String resolvedGradleVersion = new GradleDistributionVersionResolver(getNetworkTimeout().get())
             .resolve(getGradleVersion().get());
-        return "https://services.gradle.org/distributions/gradle-"
+        String repository = GradleVersion.version(resolvedGradleVersion).isSnapshot()
+            ? "distributions-snapshots"
+            : "distributions";
+        return "https://services.gradle.org/"
+            + repository
+            + "/gradle-"
             + resolvedGradleVersion
             + "-"
             + getDistributionType().get().name().toLowerCase(Locale.ROOT)
