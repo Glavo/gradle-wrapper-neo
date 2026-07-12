@@ -65,6 +65,8 @@ Rules are evaluated in order. Mirror URLs must use HTTPS, and the original distr
 ./gradlew clean build :wrapper-plugin:validatePlugins
 ```
 
+The `Verify` GitHub Actions workflow runs this validation on Ubuntu, macOS, and Windows for every branch push and pull request.
+
 Validate the final Plugin Portal publication without uploading it:
 
 ```shell
@@ -72,6 +74,8 @@ Validate the final Plugin Portal publication without uploading it:
 ```
 
 The publish task checks credentials even in validation-only mode. Set `GRADLE_PUBLISH_KEY` and `GRADLE_PUBLISH_SECRET` to the values provided by the Gradle Plugin Portal.
+
+Repository releases can be published by configuring secrets with those names and pushing a version tag such as `v0.1.0`. The `Publish Plugin` workflow can also be started manually with a version input. It performs a full release build, validates the Plugin Portal publication, and then publishes the plugin.
 
 ## License
 
