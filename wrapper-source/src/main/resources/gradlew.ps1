@@ -308,7 +308,7 @@ function Invoke-GradleWrapper {
     }
 
     $workDirectory = Join-Path $appHome '.gradle\wrapper-neo'
-    $jarFile = Join-Path $workDirectory 'gradle-wrapper-neo.jar'
+    $jarFile = Join-Path $workDirectory 'gradle-wrapper-neo-v1.jar'
     $bootstrapDirectory = Join-Path (Join-Path $workDirectory 'bootstrap') ([Guid]::NewGuid().ToString('N'))
     $classesDirectory = Join-Path $bootstrapDirectory 'classes'
 

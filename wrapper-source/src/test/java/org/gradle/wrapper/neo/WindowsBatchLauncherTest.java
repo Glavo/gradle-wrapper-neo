@@ -106,7 +106,7 @@ class WindowsBatchLauncherTest {
     }
 
     @Test
-    void refreshesStaleAndEmptyCachedJars() throws Exception {
+    void usesVersionedCacheAndRefreshesStaleAndEmptyJars() throws Exception {
         assumeTrue(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows"));
 
         copyResource("/gradlew.bat", temporaryDirectory.resolve("gradlew.bat"));
@@ -122,9 +122,15 @@ class WindowsBatchLauncherTest {
                 .getBytes(StandardCharsets.ISO_8859_1)
         );
 
+        Path cacheDirectory = temporaryDirectory.resolve(".gradle/wrapper-neo");
+        Files.createDirectories(cacheDirectory);
+        Path legacyJar = cacheDirectory.resolve("gradle-wrapper-neo.jar");
+        Files.write(legacyJar, new byte[] { 1, 2, 3, 4 });
+
         String firstOutput = runBatchLauncher("--version");
-        Path jarFile = temporaryDirectory.resolve(".gradle/wrapper-neo/gradle-wrapper-neo.jar");
+        Path jarFile = cacheDirectory.resolve("gradle-wrapper-neo-v1.jar");
         assertTrue(Files.isRegularFile(jarFile), firstOutput);
+        assertEquals(4L, Files.size(legacyJar), firstOutput);
         byte[] firstJar = Files.readAllBytes(jarFile);
 
         Files.write(
