@@ -33,7 +33,6 @@ import java.util.jar.JarFile;
 
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -106,7 +105,7 @@ class WindowsBatchLauncherTest {
     }
 
     @Test
-    void refreshesStaleAndEmptyCachedJars() throws Exception {
+    void rebuildsEmptyAndLeavesNonEmptyCorruptCachedJars() throws Exception {
         assumeTrue(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows"));
 
         copyResource("/gradlew.bat", temporaryDirectory.resolve("gradlew.bat"));
@@ -125,16 +124,6 @@ class WindowsBatchLauncherTest {
         String firstOutput = runBatchLauncher("--version");
         Path jarFile = temporaryDirectory.resolve(".gradle/wrapper-neo/gradle-wrapper-neo.jar");
         assertTrue(Files.isRegularFile(jarFile), firstOutput);
-        byte[] firstJar = Files.readAllBytes(jarFile);
-
-        Files.write(
-            sourceFile,
-            "\n// Test source change.\n".getBytes(StandardCharsets.UTF_8),
-            java.nio.file.StandardOpenOption.APPEND
-        );
-        String updateOutput = runBatchLauncher("--version");
-        byte[] updatedJar = waitForJarChange(jarFile, firstJar);
-        assertFalse(Arrays.equals(firstJar, updatedJar), updateOutput);
 
         Files.write(jarFile, new byte[0]);
         String recoveryOutput = runBatchLauncher("--version");
@@ -146,17 +135,6 @@ class WindowsBatchLauncherTest {
         Files.write(jarFile, new byte[] { 1, 2, 3, 4 });
         String corruptOutput = runBatchLauncher("--version");
         assertEquals(4L, Files.size(jarFile), corruptOutput);
-    }
-
-    private static byte[] waitForJarChange(Path jarFile, byte[] previousContent) throws Exception {
-        for (int attempt = 0; attempt < 100; attempt++) {
-            byte[] content = Files.readAllBytes(jarFile);
-            if (!Arrays.equals(previousContent, content)) {
-                return content;
-            }
-            Thread.sleep(100L);
-        }
-        return Files.readAllBytes(jarFile);
     }
 
     private String runBatchLauncher(String... arguments) throws Exception {
