@@ -111,9 +111,12 @@ public abstract class WrapperNeo extends DefaultTask {
     }
 
     /**
-     * Returns the Gradle version used to derive the distribution URL. Defaults to the current Gradle version.
+     * Returns the Gradle version selector used to derive the distribution URL.
      *
-     * @return the configurable Gradle version
+     * <p>Complete versions, the dynamic labels supported by the standard Wrapper task, and Gradle 9
+     * or later major/minor selectors are accepted. The value defaults to the current Gradle version.</p>
+     *
+     * @return the configurable Gradle version selector
      */
     @Input
     public abstract Property<String> getGradleVersion();
@@ -344,8 +347,10 @@ public abstract class WrapperNeo extends DefaultTask {
             requireNonEmpty("distributionUrl", configuredUrl);
             return configuredUrl;
         }
+        String resolvedGradleVersion = new GradleDistributionVersionResolver(getNetworkTimeout().get())
+            .resolve(getGradleVersion().get());
         return "https://services.gradle.org/distributions/gradle-"
-            + getGradleVersion().get()
+            + resolvedGradleVersion
             + "-"
             + getDistributionType().get().name().toLowerCase(Locale.ROOT)
             + ".zip";
