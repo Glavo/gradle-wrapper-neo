@@ -19,11 +19,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             gradle-command: ./gradlew
-          - os: macos-latest
+          - os: macos-15
             gradle-command: ./gradlew
-          - os: windows-latest
+          - os: windows-2022
             gradle-command: .\gradlew.bat
 
     steps:

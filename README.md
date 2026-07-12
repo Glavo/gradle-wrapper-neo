@@ -65,7 +65,7 @@ Rules are evaluated in order. Mirror URLs must use HTTPS, and the original distr
 ./gradlew clean build :wrapper-plugin:validatePlugins
 ```
 
-The `Verify` GitHub Actions workflow runs this validation on Ubuntu, macOS, and Windows for every branch push and pull request.
+The `Verify` GitHub Actions workflow runs this validation on Ubuntu 24.04, macOS 15, and Windows Server 2022 for every branch push and pull request.
 
 Validate the final Plugin Portal publication without uploading it:
 
