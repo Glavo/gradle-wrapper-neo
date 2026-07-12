@@ -1,4 +1,4 @@
-name: Publish Plugin
+name: Publish Release
 
 on:
   push:
@@ -12,15 +12,15 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: publish-plugin-${{ github.ref }}
+  group: publish-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   publish:
-    name: Publish Gradle plugin
+    name: Publish Gradle plugin and GitHub Release
     runs-on: ubuntu-24.04
     timeout-minutes: 45
 
@@ -61,12 +61,55 @@ jobs:
             exit 1
           fi
 
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            prerelease=false
+          else
+            prerelease=true
+          fi
+
           echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
       - name: Verify release build
         env:
           RELEASE_VERSION: ${{ steps.release-version.outputs.value }}
         run: ./gradlew clean build :wrapper-plugin:validatePlugins "-Pversion=$RELEASE_VERSION" --no-daemon --warning-mode all
+
+      - name: Prepare GitHub Release notes
+        shell: bash
+        run: |
+          mkdir -p build
+          cat > build/release-notes.md <<'EOF'
+          ## Install into a Gradle project
+
+          These commands keep the existing `gradle/wrapper/gradle-wrapper.properties` and remove the legacy Wrapper JAR.
+
+          ### Bash
+
+          ```bash
+          base_url="https://github.com/${{ github.repository }}/releases/download/${{ steps.release-version.outputs.tag }}"
+          mkdir -p gradle/wrapper
+          curl -fsSL "$base_url/gradlew" -o gradlew
+          curl -fsSL "$base_url/gradlew.bat" -o gradlew.bat
+          curl -fsSL "$base_url/gradlew.ps1" -o gradlew.ps1
+          curl -fsSL "$base_url/GradleWrapperNeo.java" -o gradle/wrapper/GradleWrapperNeo.java
+          chmod +x gradlew
+          rm -f gradle/wrapper/gradle-wrapper.jar
+          ```
+
+          ### PowerShell
+
+          ```powershell
+          $baseUrl = 'https://github.com/${{ github.repository }}/releases/download/${{ steps.release-version.outputs.tag }}'
+          New-Item -ItemType Directory -Force -Path 'gradle/wrapper' | Out-Null
+          Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/gradlew" -OutFile 'gradlew'
+          Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/gradlew.bat" -OutFile 'gradlew.bat'
+          Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/gradlew.ps1" -OutFile 'gradlew.ps1'
+          Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/GradleWrapperNeo.java" -OutFile 'gradle/wrapper/GradleWrapperNeo.java'
+          Remove-Item -LiteralPath 'gradle/wrapper/gradle-wrapper.jar' -Force -ErrorAction SilentlyContinue
+          ```
+          EOF
 
       - name: Check publishing credentials
         env:
@@ -91,3 +134,33 @@ jobs:
           GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
           GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
         run: ./gradlew :wrapper-plugin:publishPlugins "-Pversion=$RELEASE_VERSION" --no-daemon
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release-version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release-version.outputs.value }}
+          PRERELEASE: ${{ steps.release-version.outputs.prerelease }}
+        run: |
+          release_args=(
+            --title "Gradle Wrapper Neo $RELEASE_VERSION"
+            --generate-notes
+            --notes "$(cat build/release-notes.md)"
+          )
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            release_args+=(--verify-tag)
+          else
+            release_args+=(--target "$GITHUB_SHA")
+          fi
+          if [[ "$PRERELEASE" == "true" ]]; then
+            release_args+=(--prerelease --latest=false)
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            wrapper-source/src/main/resources/gradlew \
+            wrapper-source/src/main/resources/gradlew.bat \
+            wrapper-source/src/main/resources/gradlew.ps1 \
+            wrapper-source/build/bundle/GradleWrapperNeo.java \
+            "${release_args[@]}"
