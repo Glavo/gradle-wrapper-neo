@@ -235,7 +235,7 @@ else
 fi
 
 NEO_WORK_DIR=$APP_HOME/.gradle/wrapper-neo
-NEO_JAR=$NEO_WORK_DIR/gradle-wrapper-neo-v1.jar
+NEO_JAR=$NEO_WORK_DIR/gradle-wrapper-neo.jar
 NEO_BOOTSTRAP_DIR=$NEO_WORK_DIR/bootstrap/$$
 NEO_CLASSES_DIR=$NEO_BOOTSTRAP_DIR/classes
 
