@@ -26,6 +26,7 @@ import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.options.Option;
 import org.gradle.util.GradleVersion;
+import org.gradle.work.DisableCachingByDefault;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -48,6 +49,7 @@ import java.util.Set;
  * <p>The generated files use the conventional project layout. Distribution and archive
  * settings are exposed as Gradle properties so builds can configure the generated Wrapper.</p>
  */
+@DisableCachingByDefault(because = "Generates project wrapper files and may resolve checksums from the network.")
 public abstract class WrapperNeo extends DefaultTask {
     private static final String BUNDLE_RESOURCE_PREFIX = "/org/glavo/gradle/wrapper/neo/plugin/bundle/";
     private static final int MAX_CHECKSUM_RESPONSE_SIZE = 1024;
@@ -297,11 +299,11 @@ public abstract class WrapperNeo extends DefaultTask {
         String distributionUrl = distributionUrl();
         String distributionSha256Sum = resolveDistributionSha256Sum(distributionUrl);
 
-        writeBundledFile("gradlew", scriptFile.toPath(), LineEndings.LF);
+        writeBundledFile("gradlew", scriptFile.toPath());
         setExecutable(scriptFile.toPath());
-        writeBundledFile("gradlew.bat", batchScriptFile.toPath(), LineEndings.CRLF);
-        writeBundledFile("gradlew.ps1", powerShellScriptFile.toPath(), LineEndings.LF);
-        writeBundledFile("GradleWrapperNeo.java", sourceFile.toPath(), LineEndings.LF);
+        writeBundledFile("gradlew.bat", batchScriptFile.toPath());
+        writeBundledFile("gradlew.ps1", powerShellScriptFile.toPath());
+        writeBundledFile("GradleWrapperNeo.java", sourceFile.toPath());
         writeIfChanged(
             propertiesFile.toPath(),
             propertiesFileContent(distributionUrl, distributionSha256Sum).getBytes(StandardCharsets.ISO_8859_1)
@@ -501,22 +503,15 @@ public abstract class WrapperNeo extends DefaultTask {
         return true;
     }
 
-    private static void writeBundledFile(String name, Path target, LineEndings lineEndings) throws IOException {
-        byte[] sourceBytes;
+    private static void writeBundledFile(String name, Path target) throws IOException {
+        byte[] content;
         try (InputStream input = WrapperNeo.class.getResourceAsStream(BUNDLE_RESOURCE_PREFIX + name)) {
             if (input == null) {
                 throw new GradleException("Missing bundled wrapper resource: " + name);
             }
-            sourceBytes = readAllBytes(input);
+            content = readAllBytes(input);
         }
-
-        String content = new String(sourceBytes, StandardCharsets.UTF_8)
-            .replace("\r\n", "\n")
-            .replace('\r', '\n');
-        if (lineEndings == LineEndings.CRLF) {
-            content = content.replace("\n", "\r\n");
-        }
-        writeIfChanged(target, content.getBytes(StandardCharsets.UTF_8));
+        writeIfChanged(target, content);
     }
 
     private static byte[] readAllBytes(InputStream input) throws IOException {
@@ -557,8 +552,4 @@ public abstract class WrapperNeo extends DefaultTask {
         }
     }
 
-    private enum LineEndings {
-        LF,
-        CRLF
-    }
 }

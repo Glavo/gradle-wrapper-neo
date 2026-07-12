@@ -30,6 +30,7 @@ val compileGradleWrapperNeo = tasks.register<JavaCompile>("compileGradleWrapperN
     destinationDirectory.set(layout.buildDirectory.dir("classes/gradle-wrapper-neo"))
     options.encoding = "UTF-8"
     options.release.set(8)
+    options.compilerArgs.add("-Xlint:-options")
 }
 
 val prepareWrapperBundle = tasks.register<Sync>("prepareWrapperBundle") {

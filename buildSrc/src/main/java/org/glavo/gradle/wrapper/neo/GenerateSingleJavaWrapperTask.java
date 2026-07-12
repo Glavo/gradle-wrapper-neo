@@ -280,8 +280,8 @@ public abstract class GenerateSingleJavaWrapperTask extends DefaultTask {
         output.append("/*\n");
         output.append(" * Gradle Wrapper Neo single-file source distribution.\n");
         output.append(" *\n");
-        output.append(" * File version: ").append(wrapperVersion).append('\n');
-        output.append(" * Project: ").append(projectUrl).append('\n');
+        output.append(" * This source file is part of Gradle Wrapper Neo ").append(wrapperVersion).append(".\n");
+        output.append(" * Documentation and updates: ").append(projectUrl).append('\n');
         output.append(" *\n");
         output.append(" * Place this file at gradle/wrapper/GradleWrapperNeo.java in a Gradle project.\n");
         output.append(" * Keep gradle-wrapper.properties in the same directory and the Gradle Wrapper Neo\n");

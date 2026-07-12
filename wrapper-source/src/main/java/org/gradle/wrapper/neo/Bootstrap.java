@@ -259,6 +259,7 @@ public final class Bootstrap {
             options.add("-target");
             options.add("8");
         }
+        options.add("-Xlint:-options");
         options.add("-encoding");
         options.add("UTF-8");
         options.add("-d");

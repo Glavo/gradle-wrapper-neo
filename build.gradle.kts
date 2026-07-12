@@ -1,9 +1,11 @@
+import org.gradle.api.tasks.Delete
+
 plugins {
     base
 }
 
 group = "org.glavo"
-version = "1.0-SNAPSHOT"
+version = providers.gradleProperty("version").getOrElse("0.1.0-SNAPSHOT")
 
 allprojects {
     group = rootProject.group
@@ -12,6 +14,11 @@ allprojects {
     repositories {
         mavenCentral()
     }
+}
+
+tasks.named<Delete>("clean") {
+    setDelete(layout.buildDirectory.asFileTree)
+    dependsOn(subprojects.map { "${it.path}:clean" })
 }
 
 tasks.named("assemble") {

@@ -19,7 +19,13 @@
 @if "%DEBUG%"=="" @echo off
 @rem ##########################################################################
 @rem
-@rem  gradlew forwarding script for Windows
+@rem  Gradle Wrapper Neo forwarding script for Windows
+@rem
+@rem  This file is maintained by the Gradle Wrapper Neo project. It delegates
+@rem  to gradlew.ps1, which compiles GradleWrapperNeo.java on demand and
+@rem  launches the Wrapper without storing a Wrapper JAR in the project.
+@rem
+@rem  Documentation and updates: https://github.com/Glavo/gradle-wrapper-neo
 @rem
 @rem ##########################################################################
 
@@ -45,6 +51,8 @@ endlocal
 exit /b 1
 
 :execute
-"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0gradlew.ps1" %*
+set "GRADLE_WRAPPER_NEO_BATCH_LAUNCH=1"
+set "GRADLE_WRAPPER_NEO_BATCH_ARGUMENTS=%*"
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0gradlew.ps1"
 set "EXIT_CODE=%ERRORLEVEL%"
 endlocal & exit /b %EXIT_CODE%
