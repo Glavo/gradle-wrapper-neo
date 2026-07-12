@@ -250,66 +250,6 @@ function Invoke-NativeApplication {
     }
 }
 
-function Get-FileSha256 {
-    param([string] $Path)
-
-    $stream = [IO.File]::OpenRead($Path)
-    $digest = [Security.Cryptography.SHA256]::Create()
-    try {
-        $hash = $digest.ComputeHash($stream)
-        return [BitConverter]::ToString($hash).Replace('-', '').ToLowerInvariant()
-    } finally {
-        $digest.Dispose()
-        $stream.Dispose()
-    }
-}
-
-function Test-WrapperJarCurrent {
-    param(
-        [string] $JarFile,
-        [string] $SourceFile
-    )
-
-    $archive = $null
-    $reader = $null
-    try {
-        [void] (Add-Type -AssemblyName 'System.IO.Compression.FileSystem')
-        $archive = [IO.Compression.ZipFile]::OpenRead($JarFile)
-        if ($null -eq $archive.GetEntry('GradleWrapperNeo.class')) {
-            return $false
-        }
-
-        $manifestEntry = $archive.GetEntry('META-INF/MANIFEST.MF')
-        if ($null -eq $manifestEntry) {
-            return $false
-        }
-
-        $reader = [IO.StreamReader]::new($manifestEntry.Open(), [Text.Encoding]::UTF8, $true)
-        $manifest = $reader.ReadToEnd() -replace "\r?\n ", ''
-        $match = [regex]::Match(
-            $manifest,
-            '(?m)^Gradle-Wrapper-Neo-Source-SHA256: ([0-9a-fA-F]{64})\r?$'
-        )
-        if (-not $match.Success) {
-            return $false
-        }
-
-        return $match.Groups[1].Value.Equals(
-            (Get-FileSha256 -Path $SourceFile),
-            [StringComparison]::OrdinalIgnoreCase
-        )
-    } catch {
-        return $false
-    } finally {
-        if ($null -ne $reader) {
-            $reader.Dispose()
-        }
-        if ($null -ne $archive) {
-            $archive.Dispose()
-        }
-    }
-}
-
 function Compile-WrapperSource {
     param(
         [string] $SourceFile,
@@ -393,8 +333,8 @@ function Invoke-GradleWrapper {
         "-Dorg.gradle.wrapper.neo.jar-file=$javaJarFile"
     )
 
-    if ((Test-Path -LiteralPath $jarFile -PathType Leaf) -and
-        (-not (Test-WrapperJarCurrent -JarFile $jarFile -SourceFile $sourceFile))) {
+    $cachedJar = Get-Item -LiteralPath $jarFile -ErrorAction SilentlyContinue
+    if (($null -ne $cachedJar) -and ($cachedJar.Length -eq 0)) {
         Remove-Item -LiteralPath $jarFile -Force -ErrorAction SilentlyContinue
     }
 

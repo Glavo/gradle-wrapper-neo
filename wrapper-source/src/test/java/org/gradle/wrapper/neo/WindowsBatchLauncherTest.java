@@ -106,7 +106,7 @@ class WindowsBatchLauncherTest {
     }
 
     @Test
-    void refreshesStaleAndCorruptCachedJars() throws Exception {
+    void refreshesStaleAndEmptyCachedJars() throws Exception {
         assumeTrue(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows"));
 
         copyResource("/gradlew.bat", temporaryDirectory.resolve("gradlew.bat"));
@@ -133,15 +133,30 @@ class WindowsBatchLauncherTest {
             java.nio.file.StandardOpenOption.APPEND
         );
         String updateOutput = runBatchLauncher("--version");
-        byte[] updatedJar = Files.readAllBytes(jarFile);
+        byte[] updatedJar = waitForJarChange(jarFile, firstJar);
         assertFalse(Arrays.equals(firstJar, updatedJar), updateOutput);
 
-        Files.write(jarFile, new byte[] { 1, 2, 3, 4 });
+        Files.write(jarFile, new byte[0]);
         String recoveryOutput = runBatchLauncher("--version");
         try (JarFile recoveredJar = new JarFile(jarFile.toFile())) {
             assertNotNull(recoveredJar.getManifest(), recoveryOutput);
             assertNotNull(recoveredJar.getEntry("GradleWrapperNeo.class"), recoveryOutput);
         }
+
+        Files.write(jarFile, new byte[] { 1, 2, 3, 4 });
+        String corruptOutput = runBatchLauncher("--version");
+        assertEquals(4L, Files.size(jarFile), corruptOutput);
+    }
+
+    private static byte[] waitForJarChange(Path jarFile, byte[] previousContent) throws Exception {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            byte[] content = Files.readAllBytes(jarFile);
+            if (!Arrays.equals(previousContent, content)) {
+                return content;
+            }
+            Thread.sleep(100L);
+        }
+        return Files.readAllBytes(jarFile);
     }
 
     private String runBatchLauncher(String... arguments) throws Exception {

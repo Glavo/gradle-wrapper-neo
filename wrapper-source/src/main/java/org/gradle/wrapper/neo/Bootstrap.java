@@ -145,7 +145,11 @@ public final class Bootstrap {
         try {
             exitCode = launchJar(launchJar, appHome, sourceFile, targetJar, args);
         } finally {
-            Files.deleteIfExists(nextJar);
+            if (launchJar.equals(nextJar) && Files.isRegularFile(nextJar)) {
+                startReplacementInstaller(classesDir, sourceFile, nextJar, targetJar);
+            } else {
+                Files.deleteIfExists(nextJar);
+            }
         }
         System.exit(exitCode);
         return true;
@@ -335,6 +339,23 @@ public final class Bootstrap {
         }
     }
 
+    private static void startReplacementInstaller(
+        Path classesDir,
+        Path sourceFile,
+        Path replacementJar,
+        Path targetJar
+    ) throws IOException {
+        new ProcessBuilder(
+            javaExecutable(),
+            "-cp",
+            classesDir.toString(),
+            Bootstrap.class.getName() + "$ReplacementInstaller",
+            sourceFile.toString(),
+            replacementJar.toString(),
+            targetJar.toString()
+        ).inheritIO().start();
+    }
+
     private static void moveReplacing(Path source, Path target) throws IOException {
         try {
             Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -453,6 +474,59 @@ public final class Bootstrap {
 
     private static boolean isWindows() {
         return File.separatorChar == '\\';
+    }
+
+    /** Installs a rebuilt cache JAR after the JVM using the old JAR has exited. */
+    public static final class ReplacementInstaller {
+        private static final int MAX_REPLACEMENT_ATTEMPTS = 600;
+        private static final long RETRY_DELAY_MILLIS = 100L;
+
+        private ReplacementInstaller() {
+        }
+
+        /**
+         * Waits for the target JAR to become replaceable and installs the rebuilt JAR.
+         *
+         * @param args the source file, replacement JAR, and target JAR paths
+         */
+        public static void main(String[] args) {
+            if (args.length != 3) {
+                System.err.println("Expected source file, replacement JAR, and target JAR paths.");
+                System.exit(1);
+            }
+
+            Path sourceFile = Paths.get(args[0]);
+            Path replacementJar = Paths.get(args[1]);
+            Path targetJar = Paths.get(args[2]);
+            try {
+                withLock(targetJar.getParent(), () -> {
+                    if (!isCurrent(replacementJar, sourceFile) || isCurrent(targetJar, sourceFile)) {
+                        return null;
+                    }
+
+                    IOException lastFailure = null;
+                    for (int attempt = 0; attempt < MAX_REPLACEMENT_ATTEMPTS; attempt++) {
+                        try {
+                            moveReplacing(replacementJar, targetJar);
+                            return null;
+                        } catch (IOException e) {
+                            lastFailure = e;
+                            Thread.sleep(RETRY_DELAY_MILLIS);
+                        }
+                    }
+                    throw lastFailure;
+                });
+            } catch (Exception e) {
+                e.printStackTrace(System.err);
+                System.exit(1);
+            } finally {
+                try {
+                    Files.deleteIfExists(replacementJar);
+                } catch (IOException ignored) {
+                    // A later cache update can remove an abandoned replacement JAR.
+                }
+            }
+        }
     }
 
     @FunctionalInterface
