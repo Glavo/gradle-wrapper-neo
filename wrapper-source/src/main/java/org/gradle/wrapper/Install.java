@@ -28,6 +28,7 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -207,14 +208,11 @@ public class Install {
         for (int attempt = 1; attempt <= attempts; attempt++) {
             try {
                 File tempDownloadFile = new File(localTargetFile.getParentFile(), localTargetFile.getName() + ".part");
-                tempDownloadFile.delete();
+                Files.deleteIfExists(tempDownloadFile.toPath());
 
                 logger.log("Downloading " + safeUri(distributionUrl));
                 download.download(distributionUrl, tempDownloadFile);
-                if (localTargetFile.exists()) {
-                    localTargetFile.delete();
-                }
-                tempDownloadFile.renameTo(localTargetFile);
+                Files.move(tempDownloadFile.toPath(), localTargetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
                 return;
             } catch (IOException ioException) {
@@ -283,7 +281,7 @@ public class Install {
         }
         // if a SHA-256 hash sum has been defined in gradle-wrapper.properties, verify it here
         String actualSum = calculateSha256Sum(localZipFile);
-        if (expectedSum.equals(actualSum)) {
+        if (expectedSum.equalsIgnoreCase(actualSum)) {
             return;
         }
 

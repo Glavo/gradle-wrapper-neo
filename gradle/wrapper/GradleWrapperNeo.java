@@ -2386,13 +2386,10 @@ class Install {
         for (int attempt = 1; attempt <= attempts; attempt++) {
             try {
                 File tempDownloadFile = new File(localTargetFile.getParentFile(), localTargetFile.getName() + ".part");
-                tempDownloadFile.delete();
+                Files.deleteIfExists(tempDownloadFile.toPath());
                 logger.log("Downloading " + Download.safeUri(distributionUrl));
                 download.download(distributionUrl, tempDownloadFile);
-                if (localTargetFile.exists()) {
-                    localTargetFile.delete();
-                }
-                tempDownloadFile.renameTo(localTargetFile);
+                Files.move(tempDownloadFile.toPath(), localTargetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 return;
             } catch (IOException ioException) {
                 lastException = ioException;
@@ -2451,7 +2448,7 @@ class Install {
         }
         // if a SHA-256 hash sum has been defined in gradle-wrapper.properties, verify it here
         String actualSum = calculateSha256Sum(localZipFile);
-        if (expectedSum.equals(actualSum)) {
+        if (expectedSum.equalsIgnoreCase(actualSum)) {
             return;
         }
         localZipFile.delete();

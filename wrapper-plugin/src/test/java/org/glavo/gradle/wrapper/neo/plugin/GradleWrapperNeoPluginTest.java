@@ -34,6 +34,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -65,6 +66,11 @@ class GradleWrapperNeoPluginTest {
     }
 
     @Test
+    void validateDistributionUrlIsNotExposed() {
+        assertThrows(NoSuchMethodException.class, () -> WrapperNeo.class.getMethod("getValidateDistributionUrl"));
+    }
+
+    @Test
     void generatesSourceBasedWrapperFilesAndReusesConfigurationCache() throws IOException {
         Files.write(projectDirectory.resolve("settings.gradle"), "rootProject.name = 'test-project'\n".getBytes(StandardCharsets.UTF_8));
         Files.write(
@@ -76,7 +82,6 @@ class GradleWrapperNeoPluginTest {
                 "    distributionPath = 'custom/dists'\n" +
                 "    retries = 2\n" +
                 "    retryBackOffMs = 750\n" +
-                "    validateDistributionUrl = false\n" +
                 "}\n").getBytes(StandardCharsets.UTF_8)
         );
 
@@ -133,7 +138,7 @@ class GradleWrapperNeoPluginTest {
         assertEquals("15000", properties.getProperty("networkTimeout"));
         assertEquals("2", properties.getProperty("retries"));
         assertEquals("750", properties.getProperty("retryBackOffMs"));
-        assertEquals("false", properties.getProperty("validateDistributionUrl"));
+        assertNull(properties.getProperty("validateDistributionUrl"));
         assertEquals("GRADLE_USER_HOME", properties.getProperty("zipStoreBase"));
         assertEquals("wrapper/dists", properties.getProperty("zipStorePath"));
 
@@ -165,7 +170,7 @@ class GradleWrapperNeoPluginTest {
 
     @Test
     void configuredDistributionSha256SumTakesPriority() throws Exception {
-        String checksum = repeat('c', 64);
+        String checksum = repeat('C', 64);
         try (ChecksumServer server = new ChecksumServer(repeat('d', 64))) {
             writeMinimalProject(
                 "wrapperNeo {\n" +
@@ -177,7 +182,7 @@ class GradleWrapperNeoPluginTest {
             BuildResult result = runWrapperNeo();
 
             assertSuccessfulTask(result);
-            assertEquals(checksum, loadGeneratedProperties().getProperty("distributionSha256Sum"));
+            assertEquals(checksum.toLowerCase(Locale.ROOT), loadGeneratedProperties().getProperty("distributionSha256Sum"));
             assertEquals(0, server.requestCount.get());
         }
     }

@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -143,6 +144,28 @@ class InstallTest {
         assertEquals(gradleHomeDir, homeDir);
         assertEquals(1, download.downloadCountFor(MIRROR_DISTRIBUTION_URL));
         assertEquals(1, download.downloadCountFor(OFFICIAL_DISTRIBUTION_URL));
+    }
+
+    @Test
+    void acceptsUppercaseDistributionChecksum() throws Exception {
+        File templateZip = temporaryDirectory.resolve("template-gradle.zip").toFile();
+        createTestZip(templateZip);
+        configuration.setDistributionSha256Sum(Install.calculateSha256Sum(templateZip).toUpperCase(Locale.ROOT));
+
+        File homeDir = newInstall(RecordingDownload.copying(templateZip)).createDist(configuration);
+
+        assertEquals(gradleHomeDir, homeDir);
+    }
+
+    @Test
+    void retriesWhenDownloadedArchiveCannotReplaceTarget() throws Exception {
+        configuration.setRetries(1);
+        Files.createDirectories(zipDestination.toPath().resolve("content"));
+        RecordingDownload download = new RecordingDownload((address, destination, attempt) -> writeBytes(destination, BAD_ARCHIVE_CONTENT));
+
+        assertThrows(IOException.class, () -> newInstall(download).createDist(configuration));
+
+        assertEquals(2, download.downloadCountFor(configuration.getDistribution()));
     }
 
     @Test

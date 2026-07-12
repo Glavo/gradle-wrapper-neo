@@ -104,7 +104,6 @@ public abstract class WrapperNeo extends DefaultTask {
         getNetworkTimeout().convention(10000);
         getRetries().convention(0);
         getRetryBackOffMs().convention(500);
-        getValidateDistributionUrl().convention(true);
         getDownloadDistributionSha256Sum().convention(true);
         getRemoveLegacyWrapperJar().convention(true);
 
@@ -208,14 +207,6 @@ public abstract class WrapperNeo extends DefaultTask {
      */
     @Input
     public abstract Property<Integer> getRetryBackOffMs();
-
-    /**
-     * Returns the value written to the generated {@code validateDistributionUrl} Wrapper property.
-     *
-     * @return the configurable URL validation flag
-     */
-    @Input
-    public abstract Property<Boolean> getValidateDistributionUrl();
 
     /**
      * Returns whether generation removes the legacy {@code gradle-wrapper.jar}. Defaults to {@code true}.
@@ -342,7 +333,6 @@ public abstract class WrapperNeo extends DefaultTask {
         appendProperty(result, "networkTimeout", Integer.toString(getNetworkTimeout().get()));
         appendProperty(result, "retries", Integer.toString(getRetries().get()));
         appendProperty(result, "retryBackOffMs", Integer.toString(getRetryBackOffMs().get()));
-        appendProperty(result, "validateDistributionUrl", Boolean.toString(getValidateDistributionUrl().get()));
         appendProperty(result, "zipStoreBase", getArchiveBase().get().name());
         appendProperty(result, "zipStorePath", getArchivePath().get());
         return result.toString();
@@ -364,7 +354,7 @@ public abstract class WrapperNeo extends DefaultTask {
     private String resolveDistributionSha256Sum(String distributionUrl) {
         String configuredChecksum = getDistributionSha256Sum().getOrNull();
         if (configuredChecksum != null) {
-            return configuredChecksum;
+            return configuredChecksum.toLowerCase(Locale.ROOT);
         }
         if (!getDownloadDistributionSha256Sum().get()) {
             return null;
