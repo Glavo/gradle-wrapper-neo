@@ -1,4 +1,5 @@
 import org.glavo.gradle.wrapper.neo.GenerateSingleJavaWrapperTask
+import org.glavo.gradle.wrapper.neo.UpdateProjectWrapperTask
 import org.gradle.api.tasks.compile.JavaCompile
 
 plugins {
@@ -40,6 +41,19 @@ val prepareWrapperBundle = tasks.register<Sync>("prepareWrapperBundle") {
         include("gradlew", "gradlew.bat", "gradlew.ps1")
     }
     from(generateGradleWrapperNeo.flatMap { it.outputFile })
+}
+
+tasks.register<UpdateProjectWrapperTask>("updateGradleWrapperNeo") {
+    group = "Build Setup"
+    description = "Updates this project's Gradle Wrapper Neo launchers and generated Java source."
+    dependsOn(generateGradleWrapperNeo)
+
+    launcherDirectory.set(layout.projectDirectory.dir("src/main/resources"))
+    generatedSourceFile.set(generateGradleWrapperNeo.flatMap { it.outputFile })
+    unixScriptFile.set(rootProject.layout.projectDirectory.file("gradlew"))
+    batchScriptFile.set(rootProject.layout.projectDirectory.file("gradlew.bat"))
+    powerShellScriptFile.set(rootProject.layout.projectDirectory.file("gradlew.ps1"))
+    sourceFile.set(rootProject.layout.projectDirectory.file("gradle/wrapper/GradleWrapperNeo.java"))
 }
 
 val wrapperBundleElements = configurations.create("wrapperBundleElements") {
