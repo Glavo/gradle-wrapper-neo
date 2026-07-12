@@ -24,6 +24,14 @@ val generateGradleWrapperNeo = tasks.register<GenerateSingleJavaWrapperTask>("ge
     outputFile.set(layout.buildDirectory.file("bundle/GradleWrapperNeo.java"))
 }
 
+tasks.test {
+    dependsOn(generateGradleWrapperNeo)
+    inputs.file(generateGradleWrapperNeo.flatMap { it.outputFile })
+    doFirst {
+        systemProperty("gradle.wrapper.neo.test-source", generateGradleWrapperNeo.get().outputFile.get().asFile)
+    }
+}
+
 val compileGradleWrapperNeo = tasks.register<JavaCompile>("compileGradleWrapperNeo") {
     dependsOn(generateGradleWrapperNeo)
     source(generateGradleWrapperNeo.flatMap { it.outputFile })

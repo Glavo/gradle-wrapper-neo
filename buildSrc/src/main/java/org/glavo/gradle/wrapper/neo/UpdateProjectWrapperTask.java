@@ -13,8 +13,10 @@ import org.gradle.work.DisableCachingByDefault;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -107,7 +109,24 @@ public abstract class UpdateProjectWrapperTask extends DefaultTask {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            Files.write(target, content);
+
+            Path temporaryDirectory = parent != null ? parent : target.toAbsolutePath().getParent();
+            Path temporaryFile = Files.createTempFile(temporaryDirectory, target.getFileName().toString() + ".", ".tmp");
+            try {
+                Files.write(temporaryFile, content);
+                try {
+                    Files.move(
+                        temporaryFile,
+                        target,
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING
+                    );
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(temporaryFile, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } finally {
+                Files.deleteIfExists(temporaryFile);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException("Could not update " + target + " from " + source, e);
         }

@@ -29,16 +29,16 @@
 @rem
 @rem ##########################################################################
 
-setlocal EnableExtensions
+setlocal EnableExtensions DisableDelayedExpansion
+
+set "POWERSHELL_EXE=pwsh.exe"
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -Command "exit 0" >NUL 2>&1
+if %ERRORLEVEL% equ 0 goto execute
 
 set "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if exist "%POWERSHELL_EXE%" goto execute
 
 set "POWERSHELL_EXE=powershell.exe"
-"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -Command "exit 0" >NUL 2>&1
-if %ERRORLEVEL% equ 0 goto execute
-
-set "POWERSHELL_EXE=pwsh.exe"
 "%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -Command "exit 0" >NUL 2>&1
 if %ERRORLEVEL% equ 0 goto execute
 

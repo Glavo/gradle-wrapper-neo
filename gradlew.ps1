@@ -188,6 +188,128 @@ function ConvertTo-JavaPath {
     return $Path.Replace('\', '/')
 }
 
+function ConvertTo-WindowsCommandLineArgument {
+    param([AllowEmptyString()][string] $Argument)
+
+    if (($Argument.Length -gt 0) -and ($Argument -notmatch '[\s"]')) {
+        return $Argument
+    }
+
+    $result = New-Object Text.StringBuilder
+    [void] $result.Append([char] 34)
+    $backslashCount = 0
+    for ($index = 0; $index -lt $Argument.Length; $index++) {
+        [char] $character = $Argument[$index]
+        if ($character -eq [char] 92) {
+            $backslashCount++
+            continue
+        }
+
+        if ($character -eq [char] 34) {
+            [void] $result.Append(([string] [char] 92) * (($backslashCount * 2) + 1))
+        } elseif ($backslashCount -gt 0) {
+            [void] $result.Append(([string] [char] 92) * $backslashCount)
+        }
+        $backslashCount = 0
+        [void] $result.Append($character)
+    }
+
+    if ($backslashCount -gt 0) {
+        [void] $result.Append(([string] [char] 92) * ($backslashCount * 2))
+    }
+    [void] $result.Append([char] 34)
+    return $result.ToString()
+}
+
+function Invoke-NativeApplication {
+    param(
+        [string] $Executable,
+        [string[]] $Arguments
+    )
+
+    $quotedArguments = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($argument in $Arguments) {
+        [void] $quotedArguments.Add((ConvertTo-WindowsCommandLineArgument -Argument $argument))
+    }
+
+    $startInfo = New-Object Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Executable
+    $startInfo.Arguments = [string]::Join(' ', $quotedArguments.ToArray())
+    $startInfo.UseShellExecute = $false
+
+    $process = New-Object Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) {
+            throw "Could not start '$Executable'."
+        }
+        $process.WaitForExit()
+        return $process.ExitCode
+    } finally {
+        $process.Dispose()
+    }
+}
+
+function Get-FileSha256 {
+    param([string] $Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $digest = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $digest.ComputeHash($stream)
+        return [BitConverter]::ToString($hash).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $digest.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Test-WrapperJarCurrent {
+    param(
+        [string] $JarFile,
+        [string] $SourceFile
+    )
+
+    $archive = $null
+    $reader = $null
+    try {
+        [void] (Add-Type -AssemblyName 'System.IO.Compression.FileSystem')
+        $archive = [IO.Compression.ZipFile]::OpenRead($JarFile)
+        if ($null -eq $archive.GetEntry('GradleWrapperNeo.class')) {
+            return $false
+        }
+
+        $manifestEntry = $archive.GetEntry('META-INF/MANIFEST.MF')
+        if ($null -eq $manifestEntry) {
+            return $false
+        }
+
+        $reader = [IO.StreamReader]::new($manifestEntry.Open(), [Text.Encoding]::UTF8, $true)
+        $manifest = $reader.ReadToEnd() -replace "\r?\n ", ''
+        $match = [regex]::Match(
+            $manifest,
+            '(?m)^Gradle-Wrapper-Neo-Source-SHA256: ([0-9a-fA-F]{64})\r?$'
+        )
+        if (-not $match.Success) {
+            return $false
+        }
+
+        return $match.Groups[1].Value.Equals(
+            (Get-FileSha256 -Path $SourceFile),
+            [StringComparison]::OrdinalIgnoreCase
+        )
+    } catch {
+        return $false
+    } finally {
+        if ($null -ne $reader) {
+            $reader.Dispose()
+        }
+        if ($null -ne $archive) {
+            $archive.Dispose()
+        }
+    }
+}
+
 function Compile-WrapperSource {
     param(
         [string] $SourceFile,
@@ -271,6 +393,11 @@ function Invoke-GradleWrapper {
         "-Dorg.gradle.wrapper.neo.jar-file=$javaJarFile"
     )
 
+    if ((Test-Path -LiteralPath $jarFile -PathType Leaf) -and
+        (-not (Test-WrapperJarCurrent -JarFile $jarFile -SourceFile $sourceFile))) {
+        Remove-Item -LiteralPath $jarFile -Force -ErrorAction SilentlyContinue
+    }
+
     if (Test-Path -LiteralPath $jarFile -PathType Leaf) {
         $javaArguments += @('-jar', $javaJarFile)
     } else {
@@ -284,8 +411,7 @@ function Invoke-GradleWrapper {
     }
 
     $javaArguments += $GradleArguments
-    & $javaExecutable @javaArguments
-    $script:WrapperExitCode = $LASTEXITCODE
+    $script:WrapperExitCode = Invoke-NativeApplication -Executable $javaExecutable -Arguments $javaArguments
 }
 
 try {
