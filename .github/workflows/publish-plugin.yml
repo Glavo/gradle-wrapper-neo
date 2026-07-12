@@ -143,13 +143,7 @@ jobs:
           GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
         run: ./gradlew :wrapper-plugin:publishPlugins --validate-only --no-daemon
 
-      - name: Publish to Gradle Plugin Portal
-        env:
-          GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
-          GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
-        run: ./gradlew :wrapper-plugin:publishPlugins --no-daemon
-
-      - name: Create GitHub Release
+      - name: Create draft GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -177,4 +171,18 @@ jobs:
             wrapper-source/src/main/resources/gradlew.bat \
             wrapper-source/src/main/resources/gradlew.ps1 \
             wrapper-source/build/bundle/GradleWrapperNeo.java \
+            --draft \
             "${release_args[@]}"
+
+      - name: Publish to Gradle Plugin Portal
+        env:
+          GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
+          GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
+        run: ./gradlew :wrapper-plugin:publishPlugins --no-daemon
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release-version.outputs.tag }}
+        run: gh release edit "$RELEASE_TAG" --draft=false
