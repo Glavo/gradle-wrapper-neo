@@ -83,7 +83,8 @@ jobs:
           cat > build/release-notes.md <<'EOF'
           ## Install into a Gradle project
 
-          These commands keep the existing `gradle/wrapper/gradle-wrapper.properties` and remove the legacy Wrapper JAR.
+          Run one of the following commands from the root directory of the Gradle project you want to migrate.
+          The Gradle version configured in `gradle/wrapper/gradle-wrapper.properties` will remain unchanged.
 
           ### Bash
 
