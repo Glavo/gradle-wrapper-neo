@@ -32,7 +32,7 @@ You can replace the existing Gradle Wrapper in a project with the following shel
 Bash:
 
 ```bash
-base_url="https://github.com/Glavo/gradle-wrapper-neo/releases/download/v0.1.0"
+base_url="https://github.com/Glavo/gradle-wrapper-neo/releases/download/v0.2.0"
 mkdir -p gradle/wrapper
 curl -fsSL "$base_url/gradlew" -o gradlew
 curl -fsSL "$base_url/gradlew.bat" -o gradlew.bat
@@ -45,7 +45,7 @@ rm -f gradle/wrapper/gradle-wrapper.jar
 PowerShell:
 
 ```powershell
-$baseUrl = 'https://github.com/Glavo/gradle-wrapper-neo/releases/download/v0.1.0'
+$baseUrl = 'https://github.com/Glavo/gradle-wrapper-neo/releases/download/v0.2.0'
 New-Item -ItemType Directory -Force -Path 'gradle/wrapper' | Out-Null
 Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/gradlew" -OutFile 'gradlew'
 Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/gradlew.bat" -OutFile 'gradlew.bat'
@@ -62,7 +62,7 @@ Add it to the root project's `build.gradle.kts` file:
 
 ```kotlin
 plugins {
-    id("org.glavo.gradle-wrapper-neo") version "0.1.0"
+    id("org.glavo.gradle-wrapper-neo") version "0.2.0"
 }
 ```
 
