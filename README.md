@@ -1,5 +1,8 @@
 # Gradle Wrapper Neo
 
+[![Gradle Plugin](https://img.shields.io/gradle-plugin-portal/v/org.glavo.gradle-wrapper-neo?label=Gradle%20Plugin%20Portal)](https://plugins.gradle.org/plugin/org.glavo.gradle-wrapper-neo)
+[![License](https://img.shields.io/github/license/Glavo/gradle-wrapper-neo)](https://github.com/Glavo/gradle-wrapper-neo/blob/main/LICENSE)
+
 Gradle Wrapper Neo is an alternative to Gradle Wrapper. Its key features are:
 
 1. No embedded binary files
