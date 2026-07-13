@@ -258,9 +258,12 @@ class WindowsBatchLauncherTest {
 
         String output = readText(process.getInputStream());
         assertEquals(0, process.exitValue(), output);
-        assertEquals(
-            workingDirectory.toAbsolutePath().normalize().toString(),
+        Path actualWorkingDirectory = Paths.get(
             Files.readAllLines(userDirectoryFile, StandardCharsets.UTF_8).get(0)
+        );
+        assertTrue(
+            Files.isSameFile(workingDirectory, actualWorkingDirectory),
+            () -> "Expected working directory " + workingDirectory + ", but was " + actualWorkingDirectory
         );
     }
 
