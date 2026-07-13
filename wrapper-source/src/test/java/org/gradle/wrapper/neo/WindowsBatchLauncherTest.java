@@ -213,6 +213,57 @@ class WindowsBatchLauncherTest {
         assertEquals(expected, Files.readAllLines(argumentsFile, StandardCharsets.UTF_8));
     }
 
+    @Test
+    void usesPowerShellLocationAsJavaWorkingDirectory() throws Exception {
+        assumeTrue(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows"));
+
+        prepareLauncher();
+
+        Path windowsPowerShell = Paths.get(
+            System.getenv("SystemRoot"),
+            "System32",
+            "WindowsPowerShell",
+            "v1.0",
+            "powershell.exe"
+        );
+        assumeTrue(Files.isRegularFile(windowsPowerShell));
+
+        Path workingDirectory = Files.createDirectory(temporaryDirectory.resolve("nested"));
+        Path userDirectoryFile = temporaryDirectory.resolve("user-dir.txt");
+
+        ProcessBuilder processBuilder = new ProcessBuilder(
+            windowsPowerShell.toString(),
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "Set-Location -LiteralPath $env:GRADLE_WRAPPER_NEO_TEST_WORKING_DIRECTORY; " +
+                "& $env:GRADLE_WRAPPER_NEO_TEST_SCRIPT"
+        );
+        processBuilder.directory(temporaryDirectory.toFile());
+        processBuilder.environment().put("JAVA_HOME", System.getProperty("java.home"));
+        processBuilder.environment().put("GRADLE_WRAPPER_NEO_TEST_WORKING_DIRECTORY", workingDirectory.toString());
+        processBuilder.environment().put("GRADLE_WRAPPER_NEO_TEST_SCRIPT", temporaryDirectory.resolve("gradlew.ps1").toString());
+        processBuilder.environment().put("GRADLE_WRAPPER_NEO_TEST_USER_DIR", userDirectoryFile.toString());
+        processBuilder.redirectErrorStream(true);
+
+        Process process = processBuilder.start();
+        boolean completed = process.waitFor(30, TimeUnit.SECONDS);
+        if (!completed) {
+            process.destroyForcibly();
+        }
+        assertTrue(completed, "The PowerShell launcher did not exit within 30 seconds.");
+
+        String output = readText(process.getInputStream());
+        assertEquals(0, process.exitValue(), output);
+        assertEquals(
+            workingDirectory.toAbsolutePath().normalize().toString(),
+            Files.readAllLines(userDirectoryFile, StandardCharsets.UTF_8).get(0)
+        );
+    }
+
     private void prepareLauncher() throws IOException {
         copyResource("/gradlew.bat", temporaryDirectory.resolve("gradlew.bat"));
         copyResource("/gradlew.ps1", temporaryDirectory.resolve("gradlew.ps1"));
@@ -228,8 +279,15 @@ class WindowsBatchLauncherTest {
                 "import java.util.Arrays;\n" +
                 "public class GradleWrapperNeo {\n" +
                 "    public static void main(String[] args) throws Exception {\n" +
-                "        Files.write(Paths.get(System.getenv(\"GRADLE_WRAPPER_NEO_TEST_ARGUMENTS\")), " +
-                "Arrays.asList(args), StandardCharsets.UTF_8);\n" +
+                "        String argumentsFile = System.getenv(\"GRADLE_WRAPPER_NEO_TEST_ARGUMENTS\");\n" +
+                "        if (argumentsFile != null) {\n" +
+                "            Files.write(Paths.get(argumentsFile), Arrays.asList(args), StandardCharsets.UTF_8);\n" +
+                "        }\n" +
+                "        String userDirectoryFile = System.getenv(\"GRADLE_WRAPPER_NEO_TEST_USER_DIR\");\n" +
+                "        if (userDirectoryFile != null) {\n" +
+                "            Files.write(Paths.get(userDirectoryFile), " +
+                "Arrays.asList(System.getProperty(\"user.dir\")), StandardCharsets.UTF_8);\n" +
+                "        }\n" +
                 "    }\n" +
                 "}\n").getBytes(StandardCharsets.UTF_8)
         );
