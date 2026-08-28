@@ -2,6 +2,7 @@ import org.gradle.api.tasks.Delete
 
 plugins {
     base
+    id("org.glavo.gradle-wrapper-neo") version "0.2.0"
 }
 
 group = "org.glavo"

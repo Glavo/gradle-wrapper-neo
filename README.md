@@ -13,7 +13,7 @@ Gradle Wrapper Neo is an alternative to Gradle Wrapper. Its key features are:
 
 2. Configurable download mirrors
 
-   In some regions, such as mainland China, downloading Gradle distributions through Gradle Wrapper can be slow.
+   In some regions, such as Chinese mainland, downloading Gradle distributions through Gradle Wrapper can be slow.
 
    Gradle Wrapper Neo allows download mirrors to be configured in the user's home directory. This makes it possible to change the Gradle download source without modifying the project's `gradle-wrapper.properties` file, improving download speeds.
 
@@ -72,7 +72,7 @@ plugins {
 The plugin adds a `wrapperNeo` task that can generate the Wrapper files and update the Gradle version:
 
 ```bash
-./gradlew wrapperNeo --gradle-version 9.6.1
+./gradlew wrapperNeo --gradle-version 9.7.1
 ```
 
 ## Configure download mirrors
