@@ -3124,7 +3124,7 @@ final class MirrorConfiguration {
         }
         String replacement = string(required(mirror, "replacement", path), path + ".replacement");
         boolean requireChecksum = optionalBoolean(mirror, "requireChecksum", true, path);
-        return new Mirror(pattern, replacement, requireChecksum);
+        return new Mirror(path + ".replacement", pattern, replacement, requireChecksum);
     }
 
     private static Object required(Map<String, Object> object, String field, String path) {
@@ -3191,13 +3191,16 @@ final class MirrorConfiguration {
 
     private static final class Mirror {
 
+        private final String replacementPath;
+
         private final Pattern pattern;
 
         private final String replacement;
 
         private final boolean requireChecksum;
 
-        private Mirror(Pattern pattern, String replacement, boolean requireChecksum) {
+        private Mirror(String replacementPath, Pattern pattern, String replacement, boolean requireChecksum) {
+            this.replacementPath = replacementPath;
             this.pattern = pattern;
             this.replacement = replacement;
             this.requireChecksum = requireChecksum;
@@ -3215,16 +3218,17 @@ final class MirrorConfiguration {
             try {
                 resolvedText = matcher.replaceFirst(replacement);
             } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
-                throw new IllegalArgumentException("Invalid mirror replacement '" + replacement + "'.", e);
+                throw new IllegalArgumentException("Invalid mirror replacement at " + replacementPath + ".");
             }
             URI resolved;
             try {
-                resolved = URI.create(resolvedText);
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Mirror replacement produced an invalid URI: " + resolvedText, e);
+                resolved = new URI(resolvedText);
+            } catch (URISyntaxException e) {
+                throw new IllegalArgumentException("Mirror replacement at " + replacementPath + " produced an invalid URI.", new URISyntaxException("<mirror url>", e.getReason()));
             }
             if (!resolved.isAbsolute() || !"https".equalsIgnoreCase(resolved.getScheme()) || resolved.getHost() == null || resolved.getFragment() != null) {
-                throw new IllegalArgumentException("Mirror replacement must produce an absolute HTTPS URI without a fragment: " + resolvedText);
+                String displayUrl = resolved.isOpaque() ? "<mirror url>" : WrapperDistributionUrlConverter.safeUriDisplay(resolved);
+                throw new IllegalArgumentException("Mirror replacement at " + replacementPath + " must produce an absolute HTTPS URI without a fragment: " + displayUrl);
             }
             return resolved;
         }

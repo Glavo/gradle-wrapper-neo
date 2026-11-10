@@ -17,9 +17,15 @@ package org.gradle.wrapper;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.File;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,6 +33,8 @@ import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -155,5 +163,68 @@ class MirrorConfigurationTest {
             () -> configuration.resolve(DISTRIBUTION_URL, true)
         );
         assertTrue(failure.getMessage().contains("absolute HTTPS URI"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "https://user:secret@mirror.example/$2",
+        "https://user:secret@mirror.example/${secret}",
+        "https://user:secret@mirror.example/$"
+    })
+    void hidesCredentialsInInvalidReplacementErrors(String replacement) {
+        assertRejectedReplacement(replacement, "Invalid mirror replacement at root.mirrors[1].replacement.");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "https://user:secret@mirror.example/bad path.zip, Illegal character in path",
+        "https://user:secret@mirror.example/%XX, Malformed escape pair"
+    })
+    void hidesCredentialsInMalformedUriErrors(String replacement, String reason) {
+        IllegalArgumentException failure = assertRejectedReplacement(replacement,
+            "Mirror replacement at root.mirrors[1].replacement produced an invalid URI.");
+
+        URISyntaxException cause = assertInstanceOf(URISyntaxException.class, failure.getCause());
+        assertEquals("<mirror url>", cause.getInput());
+        assertEquals(reason, cause.getReason());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "http://user:secret@mirror.example/$1, http://***@mirror.example/gradle-9.6.1-bin.zip",
+        "//user:secret@mirror.example/$1, //***@mirror.example/gradle-9.6.1-bin.zip",
+        "https://user:secret@mirror_host/$1, https://***@mirror_host/gradle-9.6.1-bin.zip",
+        "https://user:secret@mirror.example/$1#fragment, https://***@mirror.example/gradle-9.6.1-bin.zip#fragment",
+        "http://user:secret@mirror.example/$1?token=download, http://***@mirror.example/gradle-9.6.1-bin.zip?token=download"
+    })
+    void hidesCredentialsInDisallowedUriErrors(String replacement, String reportedUrl) {
+        assertRejectedReplacement(replacement,
+            "Mirror replacement at root.mirrors[1].replacement must produce an absolute HTTPS URI without a fragment: " + reportedUrl);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "https:mirror.example/gradle.zip",
+        "https:user:secret@mirror.example/gradle.zip"
+    })
+    void preservesValidationErrorForOpaqueUris(String replacement) {
+        assertRejectedReplacement(replacement,
+            "Mirror replacement at root.mirrors[1].replacement must produce an absolute HTTPS URI without a fragment: <mirror url>");
+    }
+
+    private static IllegalArgumentException assertRejectedReplacement(String replacement, String expectedMessage) {
+        MirrorConfiguration configuration = MirrorConfiguration.parse(CONFIGURATION
+            .replace("\"mirrors\":[", "\"mirrors\":[{\"enabled\":false},")
+            .replace("https://mirror.example/gradle/$1", replacement));
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> configuration.resolve(DISTRIBUTION_URL, true));
+
+        StringWriter stackTrace = new StringWriter();
+        failure.printStackTrace(new PrintWriter(stackTrace));
+        assertFalse(stackTrace.toString().contains("secret"), stackTrace.toString());
+        assertFalse(stackTrace.toString().contains("user:"), stackTrace.toString());
+        assertEquals(expectedMessage, failure.getMessage());
+        return failure;
     }
 }
