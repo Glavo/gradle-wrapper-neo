@@ -225,17 +225,22 @@ public final class Bootstrap {
             && currentParent.equals(targetParent)
             && currentName.startsWith(TEMPORARY_JAR_PREFIX)
             && currentName.endsWith(".jar")
-            && isCurrent(currentJar, sourceFile);
+            && matchesSource(currentJar, sourceFile, false);
     }
 
     private static boolean isCurrent(Path jarFile, Path sourceFile) throws Exception {
+        return matchesSource(jarFile, sourceFile, true);
+    }
+
+    private static boolean matchesSource(Path jarFile, Path sourceFile, boolean requireNativeAccess) throws Exception {
         try (JarFile jar = new JarFile(jarFile.toFile())) {
             Manifest manifest = jar.getManifest();
             if (manifest == null) {
                 return false;
             }
             Attributes attributes = manifest.getMainAttributes();
-            return sha256(sourceFile).equals(attributes.getValue(MANIFEST_SOURCE_SHA256));
+            return sha256(sourceFile).equals(attributes.getValue(MANIFEST_SOURCE_SHA256))
+                && (!requireNativeAccess || "ALL-UNNAMED".equals(attributes.getValue("Enable-Native-Access")));
         } catch (IOException e) {
             return false;
         }
@@ -285,6 +290,7 @@ public final class Bootstrap {
             Attributes attributes = manifest.getMainAttributes();
             attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
             attributes.put(Attributes.Name.MAIN_CLASS, MAIN_CLASS_NAME);
+            attributes.putValue("Enable-Native-Access", "ALL-UNNAMED");
             attributes.putValue(MANIFEST_SOURCE_SHA256, sha256(sourceFile));
 
             try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(tempJar), manifest)) {

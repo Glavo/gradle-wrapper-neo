@@ -18,6 +18,8 @@ package org.gradle.wrapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -32,6 +34,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -144,6 +147,69 @@ class InstallTest {
         assertEquals(gradleHomeDir, homeDir);
         assertEquals(1, download.downloadCountFor(MIRROR_DISTRIBUTION_URL));
         assertEquals(1, download.downloadCountFor(OFFICIAL_DISTRIBUTION_URL));
+    }
+
+    @Test
+    void reportsMissingDistributionUrl() {
+        configuration.setDistribution(null);
+
+        NullPointerException failure = assertThrows(NullPointerException.class, () -> newInstall((address, destination) -> {
+            throw new AssertionError("Download must not start without a distribution URL.");
+        }).createDist(configuration));
+
+        assertEquals("No distribution URL specified in wrapper configuration", failure.getMessage());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "http://user:secret@server:8080/gradle-0.9.zip, http://***@server:8080/gradle-0.9.zip",
+        "http://user:secret@my_server:8080/gradle-0.9.zip, http://***@my_server:8080/gradle-0.9.zip",
+        "http://my_server:8080/gradle-0.9.zip, http://my_server:8080/gradle-0.9.zip",
+        "http://me%40corp.com:secret@server/gradle-0.9.zip, http://***@server/gradle-0.9.zip",
+        "http://user:s%40cret@server/gradle-0.9.zip, http://***@server/gradle-0.9.zip"
+    })
+    void hidesCredentialsWhenChecksumVerificationFails(String distributionUrl, String reportedUrl) throws Exception {
+        configuration.setDistribution(URI.create(distributionUrl));
+        configuration.setDistributionSha256Sum("bad");
+        File templateZip = temporaryDirectory.resolve("template-gradle.zip").toFile();
+        createTestZip(templateZip);
+
+        RuntimeException failure = assertThrows(RuntimeException.class,
+            () -> newInstall(RecordingDownload.copying(templateZip)).createDist(configuration));
+
+        assertTrue(failure.getMessage().contains("Distribution Url: " + reportedUrl));
+        assertFalse(failure.getMessage().contains("secret"));
+        assertFalse(failure.getMessage().contains("s%40cret"));
+    }
+
+    @Test
+    void hidesMirrorCredentialsInFallbackLogs() throws Exception {
+        File templateZip = temporaryDirectory.resolve("template-gradle.zip").toFile();
+        createTestZip(templateZip);
+        configureMirror(templateZip);
+        configuration.setMirrorConfiguration(MirrorConfiguration.parse(
+            MIRROR_CONFIGURATION.replace("https://mirror.example/", "https://user:secret@mirror.example/")));
+        RecordingDownload download = new RecordingDownload((address, destination, attempt) -> {
+            if (!address.equals(OFFICIAL_DISTRIBUTION_URL)) {
+                writeBytes(destination, BAD_ARCHIVE_CONTENT);
+            } else {
+                copy(templateZip, destination);
+            }
+        });
+        StringBuilder output = new StringBuilder();
+        Logger logger = new Logger(false) {
+            @Override
+            public void log(String message) {
+                output.append(message).append('\n');
+            }
+        };
+
+        File homeDir = new Install(logger, download, new FixedPathAssembler(distributionDir, zipDestination)).createDist(configuration);
+
+        assertEquals(gradleHomeDir, homeDir);
+        assertTrue(output.toString().contains("Downloading https://***@mirror.example/gradle/" + ZIP_FILE_NAME));
+        assertTrue(output.toString().contains("Download from https://***@mirror.example/gradle/" + ZIP_FILE_NAME + " failed."));
+        assertFalse(output.toString().contains("secret"));
     }
 
     @Test

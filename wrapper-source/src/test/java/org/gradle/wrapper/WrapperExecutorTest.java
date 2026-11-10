@@ -22,6 +22,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Properties;
@@ -29,6 +30,7 @@ import java.util.Properties;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -162,6 +164,19 @@ class WrapperExecutorTest {
         RuntimeException failure = assertThrows(RuntimeException.class, () -> WrapperExecutor.forWrapperPropertiesFile(propertiesFile));
 
         assertEquals("No value with key 'distributionUrl' specified in wrapper properties file '" + propertiesFile + "'.", failure.getCause().getMessage());
+    }
+
+    @Test
+    void hidesCredentialsWhenDistributionUrlIsMalformed() throws Exception {
+        properties.setProperty("distributionUrl", "https://user:secret@server/bad path.zip");
+        storeProperties();
+
+        RuntimeException failure = assertThrows(RuntimeException.class, () -> WrapperExecutor.forWrapperPropertiesFile(propertiesFile));
+
+        URISyntaxException cause = assertInstanceOf(URISyntaxException.class, failure.getCause());
+        assertEquals("<distribution url>", cause.getInput());
+        assertFalse(cause.getMessage().contains("secret"));
+        assertFalse(failure.getMessage().contains("secret"));
     }
 
     @Test

@@ -18,10 +18,12 @@ package org.gradle.internal.file.locking;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ExclusiveFileAccessManagerTest {
@@ -31,13 +33,21 @@ class ExclusiveFileAccessManagerTest {
     private final ExclusiveFileAccessManager manager = new ExclusiveFileAccessManager(1000, 10);
 
     @Test
-    void reportsGoodErrorWhenLockFileParentDirectoryCannotBeCreated() throws Exception {
+    void reportsWhyLockFileParentDirectoryCannotBeCreated() throws Exception {
         Path fileWithSameNameAsDirectory = temporaryDirectory.resolve("someDir");
         Files.createFile(fileWithSameNameAsDirectory);
         Path target = fileWithSameNameAsDirectory.resolve("someFile.zip");
 
         RuntimeException failure = assertThrows(RuntimeException.class, () -> manager.access(target.toFile(), () -> null));
 
-        assertEquals("Could not create parent directory for lock file " + target + ".lck", failure.getMessage());
+        assertInstanceOf(FileAlreadyExistsException.class, failure.getCause());
+        assertEquals("Could not create parent directory for lock file " + target + ".lck: " + failure.getCause(), failure.getMessage());
+    }
+
+    @Test
+    void acceptsExistingLockFileDirectory() throws Exception {
+        Path directory = Files.createDirectory(temporaryDirectory.resolve("existingDirectory"));
+
+        assertEquals("available", manager.access(directory.resolve("someFile.zip").toFile(), () -> "available"));
     }
 }

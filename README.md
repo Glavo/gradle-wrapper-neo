@@ -72,7 +72,7 @@ plugins {
 The plugin adds a `wrapperNeo` task that can generate the Wrapper files and update the Gradle version:
 
 ```bash
-./gradlew wrapperNeo --gradle-version 9.7.1
+./gradlew wrapperNeo --gradle-version 9.9.0
 ```
 
 ## Configure download mirrors

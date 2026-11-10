@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 (Unreleased)
+
+- Updated the Wrapper runtime and project build to Gradle 9.9.0.
+- Redacted URL credentials in diagnostics and preserved filesystem errors when creating lock directories.
+- Enabled native access in cached Wrapper JARs to avoid restricted-method warnings on Java 24 and later.
+
+---
+
 ## 0.2.0 (2026-07-14)
 
 ### Improvements

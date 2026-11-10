@@ -15,13 +15,17 @@
  */
 package org.gradle.wrapper;
 
+import org.jspecify.annotations.Nullable;
+
 import java.net.URI;
 import java.util.List;
 
 public class WrapperConfiguration {
+    @Nullable
     private URI distribution;
     private String distributionBase = PathAssembler.GRADLE_USER_HOME_STRING;
     private String distributionPath = Install.DEFAULT_DISTRIBUTION_PATH;
+    @Nullable
     private String distributionSha256Sum;
     private String zipBase = PathAssembler.GRADLE_USER_HOME_STRING;
     private String zipPath = Install.DEFAULT_DISTRIBUTION_PATH;
@@ -31,11 +35,15 @@ public class WrapperConfiguration {
     private int retryBackOffMs = Install.DEFAULT_NETWORK_RETRY_BACK_OFF_MS;
     private MirrorConfiguration mirrorConfiguration = MirrorConfiguration.empty();
 
+    /**
+     * Returns the distribution URL, or null if it has not been configured, e.g. because no wrapper properties file was found.
+     */
+    @Nullable
     public URI getDistribution() {
         return distribution;
     }
 
-    public void setDistribution(URI distribution) {
+    public void setDistribution(@Nullable URI distribution) {
         this.distribution = distribution;
     }
 
@@ -79,11 +87,12 @@ public class WrapperConfiguration {
         return retryBackOffMs;
     }
 
+    @Nullable
     public String getDistributionSha256Sum() {
         return distributionSha256Sum;
     }
 
-    public void setDistributionSha256Sum(String distributionSha256Sum) {
+    public void setDistributionSha256Sum(@Nullable String distributionSha256Sum) {
         this.distributionSha256Sum = distributionSha256Sum;
     }
 
