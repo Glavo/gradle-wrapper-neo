@@ -25,20 +25,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
-import java.util.jar.Attributes;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
-import java.util.jar.JarOutputStream;
-import java.util.jar.Manifest;
 
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WindowsBatchLauncherTest {
@@ -107,91 +100,6 @@ class WindowsBatchLauncherTest {
             ),
             arguments
         );
-    }
-
-    @Test
-    void rebuildsLegacyAndEmptyCachesAndLeavesNonEmptyCorruptJars() throws Exception {
-        assumeTrue(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows"));
-
-        copyResource("/gradlew.bat", temporaryDirectory.resolve("gradlew.bat"));
-        copyResource("/gradlew.ps1", temporaryDirectory.resolve("gradlew.ps1"));
-
-        Path wrapperDirectory = temporaryDirectory.resolve("gradle/wrapper");
-        Files.createDirectories(wrapperDirectory);
-        Path sourceFile = wrapperDirectory.resolve("GradleWrapperNeo.java");
-        String source = Files.readString(Paths.get(System.getProperty("gradle.wrapper.neo.test-source")));
-        String entryPoint = "        prepareWrapper(args).execute();";
-        assertTrue(source.contains(entryPoint));
-        Files.writeString(sourceFile, source.replace(entryPoint,
-            "        try (java.util.jar.JarFile runningJar = new java.util.jar.JarFile(new java.io.File(" +
-                "GradleWrapperNeo.class.getProtectionDomain().getCodeSource().getLocation().toURI()))) {\n" +
-                "            System.out.println(\"Native access: \" + runningJar.getManifest().getMainAttributes().getValue(\"Enable-Native-Access\"));\n" +
-                "        }\n" + entryPoint));
-        Files.write(
-            wrapperDirectory.resolve("gradle-wrapper.properties"),
-            ("distributionUrl=" + temporaryDirectory.resolve("missing.zip").toUri() + "\n")
-                .getBytes(StandardCharsets.ISO_8859_1)
-        );
-
-        String firstOutput = runBatchLauncher("--version");
-        assertTrue(firstOutput.contains("Native access: ALL-UNNAMED"), firstOutput);
-        Path jarFile = temporaryDirectory.resolve(".gradle/wrapper-neo/gradle-wrapper-neo.jar");
-        assertTrue(Files.isRegularFile(jarFile), firstOutput);
-
-        Files.write(jarFile, new byte[0]);
-        String recoveryOutput = runBatchLauncher("--version");
-        try (JarFile recoveredJar = new JarFile(jarFile.toFile())) {
-            assertNotNull(recoveredJar.getManifest(), recoveryOutput);
-            assertEquals("ALL-UNNAMED", recoveredJar.getManifest().getMainAttributes().getValue("Enable-Native-Access"));
-            assertNotNull(recoveredJar.getEntry("GradleWrapperNeo.class"), recoveryOutput);
-        }
-
-        Path legacyJar = temporaryDirectory.resolve("legacy.jar");
-        try (JarFile cachedJar = new JarFile(jarFile.toFile())) {
-            Manifest manifest = cachedJar.getManifest();
-            manifest.getMainAttributes().remove(new Attributes.Name("Enable-Native-Access"));
-            try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(legacyJar), manifest)) {
-                java.util.Enumeration<JarEntry> entries = cachedJar.entries();
-                while (entries.hasMoreElements()) {
-                    JarEntry entry = entries.nextElement();
-                    if (!entry.getName().equals(JarFile.MANIFEST_NAME)) {
-                        output.putNextEntry(new JarEntry(entry.getName()));
-                        try (InputStream input = cachedJar.getInputStream(entry)) {
-                            input.transferTo(output);
-                        }
-                        output.closeEntry();
-                    }
-                }
-            }
-        }
-        Files.move(legacyJar, jarFile, StandardCopyOption.REPLACE_EXISTING);
-        String upgradeOutput = runBatchLauncher("--version");
-        assertTrue(upgradeOutput.contains("Native access: ALL-UNNAMED"), upgradeOutput);
-
-        Files.write(jarFile, new byte[] { 1, 2, 3, 4 });
-        String corruptOutput = runBatchLauncher("--version");
-        assertEquals(4L, Files.size(jarFile), corruptOutput);
-    }
-
-    private String runBatchLauncher(String... arguments) throws Exception {
-        List<String> command = new java.util.ArrayList<>();
-        command.add("cmd.exe");
-        command.add("/d");
-        command.add("/c");
-        command.add("gradlew.bat");
-        command.addAll(Arrays.asList(arguments));
-
-        ProcessBuilder processBuilder = new ProcessBuilder(command);
-        processBuilder.directory(temporaryDirectory.toFile());
-        processBuilder.environment().put("JAVA_HOME", System.getProperty("java.home"));
-        processBuilder.redirectErrorStream(true);
-        Process process = processBuilder.start();
-        boolean completed = process.waitFor(30, TimeUnit.SECONDS);
-        if (!completed) {
-            process.destroyForcibly();
-        }
-        assertTrue(completed, "The batch launcher did not exit within 30 seconds.");
-        return readText(process.getInputStream());
     }
 
     @Test

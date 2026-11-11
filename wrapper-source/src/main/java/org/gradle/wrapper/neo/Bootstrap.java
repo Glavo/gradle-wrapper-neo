@@ -42,20 +42,14 @@ import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 
-import javax.lang.model.SourceVersion;
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
-
 /**
- * Compiles the source-based Wrapper into a cached JAR and relaunches it when the source changes.
+ * Packages the compiled Wrapper into a source-specific cached JAR and launches it.
  *
  * <p>The launcher supplies the project home, source file, and target JAR as absolute system
  * properties. A file lock serializes cache updates across concurrent Wrapper processes.</p>
  */
 public final class Bootstrap {
     private static final String MAIN_CLASS_NAME = "GradleWrapperNeo";
-    private static final String TEMPORARY_JAR_PREFIX = "gradle-wrapper-neo-";
-    private static final String CLASSES_DIR_NAME = "classes";
     private static final String LOCK_FILE_NAME = "lock";
     private static final String BOOTSTRAP_PROPERTY = "gradle.wrapper.neo.bootstrap";
     /** System property containing the absolute project directory used as the Wrapper application home. */
@@ -70,12 +64,12 @@ public final class Bootstrap {
     }
 
     /**
-     * Ensures the cached Wrapper JAR matches the configured source and relaunches it when needed.
+     * Creates the cached Wrapper JAR on first launch and validates it on subsequent launches.
      *
      * @param args the command-line arguments forwarded to the Wrapper
      * @param mainClass the class used to locate the currently running code
      * @return {@code true} when the caller must stop because another Wrapper process was launched
-     * @throws Exception if the source cannot be compiled, cached, or launched
+     * @throws Exception if the cache cannot be validated, created, or launched
      */
     public static boolean handle(String[] args, Class<?> mainClass) throws Exception {
         Path appHome = appHome();
@@ -88,6 +82,11 @@ public final class Bootstrap {
             throw new RuntimeException("Wrapper source file '" + sourceFile + "' does not exist.");
         }
 
+        String sourceHash = sha256(sourceFile);
+        if (!sourceHash.equals(targetJar.getParent().getFileName().toString())) {
+            throw new RuntimeException("Wrapper source changed during startup. Please run the Wrapper again.");
+        }
+
         if (Boolean.getBoolean(BOOTSTRAP_PROPERTY)) {
             Path stagingClassesDir = codeSource(mainClass);
             if (!Files.isDirectory(stagingClassesDir)) {
@@ -96,15 +95,12 @@ public final class Bootstrap {
             int exitCode;
             try {
                 withLock(targetJar.getParent(), () -> {
-                    if (!isCurrent(targetJar, sourceFile)) {
-                        Path classesDir = classesDir(targetJar);
-                        recreateDirectory(classesDir);
-                        copyDirectory(stagingClassesDir, classesDir);
-                        writeJar(sourceFile, classesDir, targetJar);
+                    if (!isCurrent(targetJar, sourceHash)) {
+                        writeJar(sourceHash, stagingClassesDir, targetJar);
                     }
                     return null;
                 });
-                exitCode = launchJar(targetJar, appHome, sourceFile, targetJar, args);
+                exitCode = launchJar(targetJar, appHome, sourceFile, args);
             } finally {
                 deleteRecursively(stagingClassesDir);
                 deleteIfEmpty(stagingClassesDir.getParent());
@@ -117,38 +113,13 @@ public final class Bootstrap {
         if (!Files.isRegularFile(currentJar)) {
             throw new RuntimeException("Cached wrapper JAR '" + currentJar + "' does not exist.");
         }
-        if (!isExpectedJar(currentJar, targetJar, sourceFile)) {
+        if (!currentJar.toAbsolutePath().normalize().equals(targetJar)) {
             throw new RuntimeException("Running wrapper JAR '" + currentJar + "' does not match configured JAR '" + targetJar + "'.");
         }
-        if (isCurrent(currentJar, sourceFile)) {
-            return false;
+        if (!isCurrent(currentJar, sourceHash)) {
+            throw new RuntimeException("Invalid wrapper cache. Delete '" + targetJar + "' and run the Wrapper again.");
         }
-
-        Path classesDir = classesDir(targetJar);
-        Files.createDirectories(targetJar.getParent());
-        Path nextJar = Files.createTempFile(targetJar.getParent(), TEMPORARY_JAR_PREFIX, ".jar");
-        Path launchJar;
-        try {
-            launchJar = withLock(targetJar.getParent(), () -> {
-                if (isCurrent(targetJar, sourceFile)) {
-                    return targetJar;
-                }
-                compileSource(sourceFile, classesDir);
-                writeJar(sourceFile, classesDir, nextJar);
-                return installReplacement(nextJar, targetJar);
-            });
-        } catch (Exception e) {
-            Files.deleteIfExists(nextJar);
-            throw e;
-        }
-        int exitCode;
-        try {
-            exitCode = launchJar(launchJar, appHome, sourceFile, targetJar, args);
-        } finally {
-            Files.deleteIfExists(nextJar);
-        }
-        System.exit(exitCode);
-        return true;
+        return false;
     }
 
     private static Path codeSource(Class<?> mainClass) {
@@ -197,10 +168,6 @@ public final class Bootstrap {
         return requireAbsolutePath(JAR_FILE_PROPERTY);
     }
 
-    private static Path classesDir(Path targetJar) {
-        return targetJar.getParent().resolve(CLASSES_DIR_NAME);
-    }
-
     private static <T> T withLock(Path cacheDirectory, LockedAction<T> action) throws Exception {
         Files.createDirectories(cacheDirectory);
         try (
@@ -211,78 +178,21 @@ public final class Bootstrap {
         }
     }
 
-    private static boolean isExpectedJar(Path currentJar, Path targetJar, Path sourceFile) throws Exception {
-        Path normalizedCurrentJar = currentJar.toAbsolutePath().normalize();
-        Path normalizedTargetJar = targetJar.toAbsolutePath().normalize();
-        if (normalizedCurrentJar.equals(normalizedTargetJar)) {
-            return true;
-        }
-
-        Path currentParent = normalizedCurrentJar.getParent();
-        Path targetParent = normalizedTargetJar.getParent();
-        String currentName = normalizedCurrentJar.getFileName().toString();
-        return currentParent != null
-            && currentParent.equals(targetParent)
-            && currentName.startsWith(TEMPORARY_JAR_PREFIX)
-            && currentName.endsWith(".jar")
-            && matchesSource(currentJar, sourceFile, false);
-    }
-
-    private static boolean isCurrent(Path jarFile, Path sourceFile) throws Exception {
-        return matchesSource(jarFile, sourceFile, true);
-    }
-
-    private static boolean matchesSource(Path jarFile, Path sourceFile, boolean requireNativeAccess) throws Exception {
+    private static boolean isCurrent(Path jarFile, String sourceHash) {
         try (JarFile jar = new JarFile(jarFile.toFile())) {
             Manifest manifest = jar.getManifest();
             if (manifest == null) {
                 return false;
             }
             Attributes attributes = manifest.getMainAttributes();
-            return sha256(sourceFile).equals(attributes.getValue(MANIFEST_SOURCE_SHA256))
-                && (!requireNativeAccess || "ALL-UNNAMED".equals(attributes.getValue("Enable-Native-Access")));
+            return sourceHash.equals(attributes.getValue(MANIFEST_SOURCE_SHA256))
+                && "ALL-UNNAMED".equals(attributes.getValue("Enable-Native-Access"));
         } catch (IOException e) {
             return false;
         }
     }
 
-    private static void compileSource(Path sourceFile, Path classesDir) throws Exception {
-        recreateDirectory(classesDir);
-
-        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-        if (compiler == null) {
-            throw new RuntimeException("Could not compile " + sourceFile + ". A JDK with the system Java compiler is required.");
-        }
-
-        List<String> options = new ArrayList<>();
-        if (SourceVersion.latestSupported().compareTo(SourceVersion.RELEASE_8) > 0) {
-            options.add("--release");
-            options.add("8");
-        } else {
-            options.add("-source");
-            options.add("8");
-            options.add("-target");
-            options.add("8");
-        }
-        options.add("-Xlint:-options");
-        options.add("-encoding");
-        options.add("UTF-8");
-        options.add("-d");
-        options.add(classesDir.toString());
-        options.add(sourceFile.toString());
-
-        int result = compiler.run(null, null, null, options.toArray(new String[0]));
-        if (result != 0) {
-            throw new RuntimeException("Could not compile " + sourceFile + " with the system Java compiler.");
-        }
-    }
-
-    private static void recreateDirectory(Path directory) throws IOException {
-        deleteRecursively(directory);
-        Files.createDirectories(directory);
-    }
-
-    private static void writeJar(Path sourceFile, Path classesDir, Path targetJar) throws Exception {
+    private static void writeJar(String sourceHash, Path classesDir, Path targetJar) throws Exception {
         Files.createDirectories(targetJar.getParent());
         Path tempJar = Files.createTempFile(targetJar.getParent(), targetJar.getFileName().toString() + ".", ".tmp");
         try {
@@ -291,7 +201,7 @@ public final class Bootstrap {
             attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
             attributes.put(Attributes.Name.MAIN_CLASS, MAIN_CLASS_NAME);
             attributes.putValue("Enable-Native-Access", "ALL-UNNAMED");
-            attributes.putValue(MANIFEST_SOURCE_SHA256, sha256(sourceFile));
+            attributes.putValue(MANIFEST_SOURCE_SHA256, sourceHash);
 
             try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(tempJar), manifest)) {
                 addClasses(output, classesDir);
@@ -316,31 +226,6 @@ public final class Bootstrap {
         });
     }
 
-    private static void copyDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
-        Files.walkFileTree(sourceDirectory, new SimpleFileVisitor<Path>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                Files.createDirectories(targetDirectory.resolve(sourceDirectory.relativize(dir)));
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                Files.copy(file, targetDirectory.resolve(sourceDirectory.relativize(file)), StandardCopyOption.REPLACE_EXISTING);
-                return FileVisitResult.CONTINUE;
-            }
-        });
-    }
-
-    private static Path installReplacement(Path sourceJar, Path targetJar) {
-        try {
-            moveReplacing(sourceJar, targetJar);
-            return targetJar;
-        } catch (IOException e) {
-            return sourceJar;
-        }
-    }
-
     private static void moveReplacing(Path source, Path target) throws IOException {
         try {
             Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -350,10 +235,9 @@ public final class Bootstrap {
     }
 
     private static int launchJar(
-        Path launchJar,
+        Path targetJar,
         Path appHome,
         Path sourceFile,
-        Path targetJar,
         String[] args
     ) throws Exception {
         List<String> command = new ArrayList<>();
@@ -365,7 +249,7 @@ public final class Bootstrap {
             targetJar
         ));
         command.add("-jar");
-        command.add(launchJar.toString());
+        command.add(targetJar.toString());
         for (String arg : args) {
             command.add(arg);
         }

@@ -28,6 +28,10 @@ Gradle Wrapper Neo is an alternative to Gradle Wrapper. Its key features are:
 
 ## Getting started
 
+The first run requires a JDK to compile the Wrapper. Compiled JARs are cached under
+`.gradle/wrapper-neo/<source-sha256>/` and reused while the source is unchanged.
+The Unix launcher requires `sha256sum` or `shasum`. When upgrading, update both the source and the launcher scripts.
+
 ### Install in a project
 
 You can replace the existing Gradle Wrapper in a project with the following shell commands:

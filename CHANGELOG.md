@@ -5,6 +5,7 @@
 - Updated the Wrapper runtime and project build to Gradle 9.9.0.
 - Redacted URL credentials in diagnostics and preserved filesystem errors when creating lock directories.
 - Enabled native access in cached Wrapper JARs to avoid restricted-method warnings on Java 24 and later.
+- Keyed Wrapper caches by source SHA-256 so upgrades persist on Windows without replacing a running JAR.
 
 ---
 
