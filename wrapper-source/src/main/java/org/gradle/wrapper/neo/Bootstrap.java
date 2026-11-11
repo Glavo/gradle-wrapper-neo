@@ -113,7 +113,7 @@ public final class Bootstrap {
         if (!Files.isRegularFile(currentJar)) {
             throw new RuntimeException("Cached wrapper JAR '" + currentJar + "' does not exist.");
         }
-        if (!currentJar.toAbsolutePath().normalize().equals(targetJar)) {
+        if (!Files.isSameFile(currentJar, targetJar)) {
             throw new RuntimeException("Running wrapper JAR '" + currentJar + "' does not match configured JAR '" + targetJar + "'.");
         }
         if (!isCurrent(currentJar, sourceHash)) {

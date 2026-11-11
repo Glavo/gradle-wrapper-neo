@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 (Unreleased)
+
+- Fixed cache validation to recognize paths that refer to the same JAR through short names or directory aliases.
+- Added directory alias regression coverage and corrected cache path assertions to compare file identity.
+- Enabled full exception details in Wrapper test failure logs.
+
+---
+
 ## 0.3.0 (2026-11-11)
 
 - Updated the Wrapper runtime and project build to Gradle 9.9.0.

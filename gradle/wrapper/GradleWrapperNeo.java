@@ -1,7 +1,7 @@
 /*
  * Gradle Wrapper Neo single-file source distribution.
  *
- * This source file is part of Gradle Wrapper Neo 0.3.0.
+ * This source file is part of Gradle Wrapper Neo 0.4.0-SNAPSHOT.
  * Documentation and updates: https://github.com/Glavo/gradle-wrapper-neo
  *
  * Place this file at gradle/wrapper/GradleWrapperNeo.java in a Gradle project.
@@ -3828,7 +3828,7 @@ final class Bootstrap {
         if (!Files.isRegularFile(currentJar)) {
             throw new RuntimeException("Cached wrapper JAR '" + currentJar + "' does not exist.");
         }
-        if (!currentJar.toAbsolutePath().normalize().equals(targetJar)) {
+        if (!Files.isSameFile(currentJar, targetJar)) {
             throw new RuntimeException("Running wrapper JAR '" + currentJar + "' does not match configured JAR '" + targetJar + "'.");
         }
         if (!isCurrent(currentJar, sourceHash)) {

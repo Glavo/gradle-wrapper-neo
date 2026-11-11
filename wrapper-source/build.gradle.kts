@@ -1,6 +1,7 @@
 import org.glavo.gradle.wrapper.neo.GenerateSingleJavaWrapperTask
 import org.glavo.gradle.wrapper.neo.UpdateProjectWrapperTask
 import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
 plugins {
     java
@@ -15,6 +16,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    testLogging.exceptionFormat = TestExceptionFormat.FULL
 }
 
 val generateGradleWrapperNeo = tasks.register<GenerateSingleJavaWrapperTask>("generateGradleWrapperNeo") {

@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -35,6 +36,7 @@ import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class WrapperCacheTest {
     @TempDir
@@ -65,6 +67,29 @@ class WrapperCacheTest {
         Files.writeString(sourceFile, source.replace(main, main + "\n        System.out.println(\"WRAPPER_JVM\");")
             .replace(execute, "        System.out.println(\"WRAPPER_READY \" + " +
                 "GradleWrapperNeo.class.getProtectionDomain().getCodeSource().getLocation().toURI());"));
+    }
+
+    @Test
+    void launchesThroughProjectDirectoryAlias() throws Exception {
+        Path originalProject = project;
+        Path originalSource = sourceFile;
+        Path alias = project.resolveSibling(project.getFileName() + "-alias");
+        try {
+            Files.createSymbolicLink(alias, project);
+        } catch (IOException | UnsupportedOperationException | SecurityException e) {
+            assumeTrue(false, "Symbolic links are unavailable: " + e);
+        }
+        try {
+            project = alias;
+            sourceFile = alias.resolve("gradle/wrapper/GradleWrapperNeo.java");
+            assertLaunch(finish(start()), 2, 1);
+            assertLaunch(finish(start()), 1, 0);
+            assertCache();
+        } finally {
+            project = originalProject;
+            sourceFile = originalSource;
+            Files.deleteIfExists(alias);
+        }
     }
 
     @Test
@@ -159,7 +184,7 @@ class WrapperCacheTest {
     private void assertRunningCache(String output) throws Exception {
         String location = output.lines().filter(line -> line.startsWith("WRAPPER_READY "))
             .findFirst().orElseThrow(() -> new AssertionError(output)).substring("WRAPPER_READY ".length());
-        assertEquals(cacheJar(), Paths.get(URI.create(location)), output);
+        assertTrue(Files.isSameFile(cacheJar(), Paths.get(URI.create(location))), output);
     }
 
     private Process start() throws Exception {
