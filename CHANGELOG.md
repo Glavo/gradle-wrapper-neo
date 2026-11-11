@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 (Unreleased)
+## 0.4.0 (2026-11-11)
 
 - Fixed cache validation to recognize paths that refer to the same JAR through short names or directory aliases.
 - Added directory alias regression coverage and corrected cache path assertions to compare file identity.
