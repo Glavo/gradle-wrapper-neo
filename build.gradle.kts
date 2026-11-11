@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "org.glavo"
-version = providers.gradleProperty("version").getOrElse("0.3.0-SNAPSHOT")
+version = providers.gradleProperty("version").getOrElse("0.3.0")
 
 allprojects {
     group = rootProject.group

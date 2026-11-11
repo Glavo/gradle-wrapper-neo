@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 (Unreleased)
+## 0.3.0 (2026-11-11)
 
 - Updated the Wrapper runtime and project build to Gradle 9.9.0.
 - Redacted URL credentials in diagnostics and preserved filesystem errors when creating lock directories.
